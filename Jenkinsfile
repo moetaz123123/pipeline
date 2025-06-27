@@ -1,12 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        php 'PHP 8.2'
-        maven 'Maven 3.9'
-        jdk 'JDK 17'
-    }
-
     environment {
         DOCKER_IMAGE = 'laravel-app'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
