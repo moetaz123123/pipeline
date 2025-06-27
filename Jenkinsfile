@@ -4,15 +4,14 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'laravel-multitenant'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
-        SONAR_TOKEN = credentials('sonar-token')
-        DOCKER_REGISTRY = 'docker.io'  // Docker Hub
-        DOCKER_USERNAME = 'moetaz1928' // Remplacez par votre username Docker Hub
+        SONAR_TOKEN = credentials('sonar-token') // Assure-toi que ce token est bien ajouté dans Jenkins
+        DOCKER_REGISTRY = 'docker.io'
+        DOCKER_USERNAME = 'moetaz1928'
         COMPOSER_PATH = '/usr/local/bin/composer'
         PHP_PATH = '/usr/bin/php'
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 checkout scm
@@ -32,7 +31,6 @@ pipeline {
                 script {
                     sh '''
                         cp .env.example .env || echo ".env.example non trouvé, création d'un .env basique"
-
                         echo "APP_ENV=testing" >> .env
                         echo "APP_DEBUG=true" >> .env
                         echo "DB_CONNECTION=sqlite" >> .env
@@ -40,13 +38,10 @@ pipeline {
                         echo "CACHE_DRIVER=array" >> .env
                         echo "SESSION_DRIVER=array" >> .env
                         echo "QUEUE_DRIVER=sync" >> .env
-
                         ${PHP_PATH} artisan key:generate --force || echo "APP_KEY=base64:$(openssl rand -base64 32)" >> .env
-
                         if ! grep -q "APP_KEY=base64:" .env; then
                             echo "APP_KEY=base64:$(openssl rand -base64 32)" >> .env
                         fi
-
                         echo "Configuration Laravel pour les tests:"
                         grep -E "APP_ENV|APP_DEBUG|DB_CONNECTION|APP_KEY" .env
                     '''
@@ -56,7 +51,6 @@ pipeline {
 
         stage('Code Quality & Security') {
             parallel {
-
                 stage('Unit Tests') {
                     steps {
                         script {
@@ -124,27 +118,22 @@ pipeline {
                     steps {
                         script {
                             echo "=== Début de l'analyse SonarQube ==="
-
                             def scannerAvailable = sh(
                                 script: 'command -v sonar-scanner &> /dev/null && echo "available" || echo "not_available"',
                                 returnStdout: true
                             ).trim()
-
                             echo "SonarQube Scanner disponible: ${scannerAvailable}"
 
                             if (scannerAvailable == 'available') {
                                 if (fileExists('sonar-project.properties')) {
-                                    echo "Fichier sonar-project.properties trouvé"
                                     withSonarQubeEnv('SonarQube') {
                                         sh '''
                                             echo "Configuration SonarQube:"
                                             cat sonar-project.properties
-                                            echo "Lancement de sonar-scanner..."
                                             sonar-scanner -Dsonar.login=${SONAR_TOKEN}
                                         '''
                                     }
                                 } else {
-                                    echo "Fichier sonar-project.properties manquant, utilisation de la configuration par défaut"
                                     withSonarQubeEnv('SonarQube') {
                                         sh '''
                                             sonar-scanner \
@@ -157,7 +146,7 @@ pipeline {
                                     }
                                 }
                             } else {
-                                echo "SonarQube Scanner non installé, étape ignorée"
+                                echo "SonarQube Scanner non installé"
                             }
 
                             echo "=== Fin de l'analyse SonarQube ==="
@@ -165,18 +154,17 @@ pipeline {
                     }
                     post {
                         always {
-                            echo "Étape SonarQube Analysis terminée"
+                            echo "Étape SonarQube terminée"
                         }
                     }
                 }
-
             }
         }
 
         stage('Mutation Tests') {
             steps {
                 script {
-                    sh '${PHP_PATH} vendor/bin/infection --min-msi=80 --min-covered-msi=80 --log-verbosity=all || echo "Infection non disponible ou échec, étape ignorée"'
+                    sh '${PHP_PATH} vendor/bin/infection --min-msi=80 --min-covered-msi=80 --log-verbosity=all || echo "Infection échoué ou non installé"'
                 }
             }
             post {
@@ -195,7 +183,6 @@ pipeline {
 
         stage('Build & Security') {
             parallel {
-
                 stage('Build Docker Image') {
                     steps {
                         script {
@@ -231,7 +218,6 @@ pipeline {
                         }
                     }
                 }
-
             }
         }
 
@@ -260,7 +246,6 @@ pipeline {
                 branch 'main'
             }
             parallel {
-
                 stage('Push to Registry') {
                     steps {
                         script {
@@ -284,35 +269,37 @@ pipeline {
                         }
                     }
                 }
-
             }
         }
     }
 
     post {
         always {
-            sh '''
-                docker image prune -f
-                docker container prune -f
-            '''
+            script {
+                sh '''
+                    docker image prune -f
+                    docker container prune -f
+                '''
+            }
             cleanWs()
         }
 
         success {
             emailext (
                 subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "🎉 Build terminé avec succès.\n\nVoir les détails ici : ${env.BUILD_URL}",
-                recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+                body: "Le build a réussi. Voir : ${env.BUILD_URL}",
+                recipientProviders: [[$class: 'DevelopersRecipientProvider']],
+                to: "ton.email@example.com"
             )
         }
 
         failure {
             emailext (
                 subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Le build a échoué.\n\nVoir les logs ici : ${env.BUILD_URL}",
-                recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+                body: "Le build a échoué. Voir : ${env.BUILD_URL}",
+                recipientProviders: [[$class: 'DevelopersRecipientProvider']],
+                to: "ton.email@example.com"
             )
         }
     }
 }
-
