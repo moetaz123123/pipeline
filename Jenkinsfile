@@ -7,8 +7,8 @@ pipeline {
         SONAR_TOKEN = credentials('sonar-token')
         DOCKER_REGISTRY = 'docker.io'
         DOCKER_USERNAME = 'moetaz1928'
-        COMPOSER_PATH = tool('Composer')
-        PHP_PATH = tool('PHP 8.2')
+        COMPOSER_PATH = '/usr/local/bin/composer'
+        PHP_PATH = '/usr/bin/php'
         TRIVY_PATH = tool('Trivy')
         SONAR_SCANNER_PATH = tool('sonarqube')
     }
@@ -30,7 +30,7 @@ pipeline {
             steps {
                 echo '📦 Installing PHP dependencies...'
                 script {
-                    sh "${COMPOSER_PATH} install --optimize-autoloader --no-interaction"
+                    sh "${COMPOSER_PATH} install --optimize-autoloader"
                 }
             }
             post {
@@ -120,8 +120,8 @@ pipeline {
                         echo '🔒 Running Security scan...'
                         script {
                             sh '''
-                                ${TRIVY_PATH} fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt || echo "Trivy scan completed"
-                                ${TRIVY_PATH} fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt || echo "Trivy composer scan completed"
+                                ${TRIVY_PATH} fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt
+                                ${TRIVY_PATH} fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt
                             '''
                         }
                     }
@@ -146,25 +146,43 @@ pipeline {
                         script {
                             echo "=== Début de l'analyse SonarQube ==="
                             
-                            if (fileExists('sonar-project.properties')) {
-                                withSonarQubeEnv('SonarQube') {
-                                    sh '''
-                                        echo "Configuration SonarQube:"
-                                        cat sonar-project.properties
-                                        ${SONAR_SCANNER_PATH} -Dsonar.login=${SONAR_TOKEN}
-                                    '''
+                            def scannerAvailable = sh(
+                                script: 'command -v sonar-scanner &> /dev/null && echo "available" || echo "not_available"',
+                                returnStdout: true
+                            ).trim()
+                            
+                            echo "SonarQube Scanner disponible: ${scannerAvailable}"
+                            
+                            if (scannerAvailable == 'available') {
+                                echo "SonarQube Scanner trouvé, lancement de l'analyse..."
+                                
+                                if (fileExists('sonar-project.properties')) {
+                                    echo "Fichier sonar-project.properties trouvé"
+                                    
+                                    withSonarQubeEnv('SonarQube') {
+                                        sh '''
+                                            echo "Configuration SonarQube:"
+                                            cat sonar-project.properties
+                                            echo "Lancement de sonar-scanner..."
+                                            sonar-scanner -Dsonar.login=${SONAR_TOKEN}
+                                        '''
+                                    }
+                                } else {
+                                    echo "Fichier sonar-project.properties manquant, utilisation de la configuration par défaut"
+                                    withSonarQubeEnv('SonarQube') {
+                                        sh '''
+                                            sonar-scanner \
+                                                -Dsonar.projectKey=laravel-multitenant \
+                                                -Dsonar.sources=app,config,database,resources,routes \
+                                                -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,tests/** \
+                                                -Dsonar.php.coverage.reportPaths=coverage.xml \
+                                                -Dsonar.login=${SONAR_TOKEN}
+                                        '''
+                                    }
                                 }
                             } else {
-                                withSonarQubeEnv('SonarQube') {
-                                    sh '''
-                                        ${SONAR_SCANNER_PATH} \
-                                            -Dsonar.projectKey=laravel-multitenant \
-                                            -Dsonar.sources=app,config,database,resources,routes \
-                                            -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,tests/** \
-                                            -Dsonar.php.coverage.reportPaths=coverage.xml \
-                                            -Dsonar.login=${SONAR_TOKEN}
-                                    '''
-                                }
+                                echo "SonarQube Scanner non installé, étape ignorée"
+                                echo "Pour installer: wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip"
                             }
 
                             echo "=== Fin de l'analyse SonarQube ==="
@@ -190,7 +208,7 @@ pipeline {
             steps {
                 echo '🧬 Running Mutation tests...'
                 script {
-                    sh '${PHP_PATH} vendor/bin/infection --min-msi=80 --min-covered-msi=80 --log-verbosity=all || echo "Infection échoué ou non installé"'
+                    sh '${PHP_PATH} vendor/bin/infection --min-msi=80 --min-covered-msi=80 --log-verbosity=all || echo "Infection non disponible ou échec, étape ignorée"'
                 }
             }
             post {
@@ -235,7 +253,7 @@ pipeline {
                                 ${TRIVY_PATH} image ${DOCKER_IMAGE}:${DOCKER_TAG} \
                                     --severity HIGH,CRITICAL \
                                     --format table \
-                                    --output trivy-image-report.txt || echo "Docker image scan completed"
+                                    --output trivy-image-report.txt
                             '''
                         }
                     }
@@ -270,9 +288,9 @@ pipeline {
                     sh '''
                         docker compose up -d db
                         sleep 30
-                        docker compose exec -T db mysql -uroot -pRoot@1234 -e "CREATE DATABASE IF NOT EXISTS laravel_multitenant_test;" || echo "Database creation completed"
-                        docker compose exec -T app php artisan migrate --env=testing || echo "Migration completed"
-                        docker compose exec -T app vendor/bin/phpunit --testsuite=Feature --log-junit junit-integration.xml || echo "Integration tests completed"
+                        docker compose exec -T db mysql -uroot -pRoot@1234 -e "CREATE DATABASE IF NOT EXISTS laravel_multitenant_test;"
+                        docker compose exec -T app php artisan migrate --env=testing
+                        docker compose exec -T app vendor/bin/phpunit --testsuite=Feature --log-junit junit-integration.xml
                         docker compose down
                     '''
                 }
@@ -326,7 +344,7 @@ pipeline {
                     steps {
                         echo '🚀 Deploying to staging...'
                         script {
-                            sh 'docker compose -f docker-compose.staging.yml up -d || echo "Staging deployment completed"'
+                            sh 'docker compose -f docker-compose.staging.yml up -d'
                         }
                     }
                     post {
@@ -342,87 +360,95 @@ pipeline {
     post {
         always {
             echo '🧹 Cleaning up workspace...'
-            script {
-                try {
-                    sh 'docker image prune -f || echo "Docker cleanup completed"'
-                    sh 'docker container prune -f || echo "Container cleanup completed"'
-                } catch (Exception e) {
-                    echo "Cleanup failed: ${e.getMessage()}"
+            node {
+                script {
+                    try {
+                        sh 'docker image prune -f || echo "Docker cleanup completed"'
+                        sh 'docker container prune -f || echo "Container cleanup completed"'
+                    } catch (Exception e) {
+                        echo "Cleanup failed: ${e.getMessage()}"
+                    }
                 }
             }
         }
 
         success {
             echo '🎉 Pipeline completed successfully!'
-            script {
-                try {
-                    emailext (
-                        subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                        body: """
-                            <h2>🎉 Pipeline Completed Successfully!</h2>
-                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                            <hr>
-                            <p>All stages completed successfully including tests, security scans, and quality checks.</p>
-                        """,
-                        mimeType: 'text/html',
-                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                        replyTo: 'jenkins@example.com'
-                    )
-                } catch (Exception e) {
-                    echo "Email notification failed: ${e.getMessage()}"
+            node {
+                script {
+                    try {
+                        emailext (
+                            subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            body: """
+                                <h2>🎉 Pipeline Completed Successfully!</h2>
+                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                                <hr>
+                                <p>All stages completed successfully including tests, security scans, and quality checks.</p>
+                            """,
+                            mimeType: 'text/html',
+                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                            replyTo: 'jenkins@example.com'
+                        )
+                    } catch (Exception e) {
+                        echo "Email notification failed: ${e.getMessage()}"
+                    }
                 }
             }
         }
 
         failure {
             echo '❌ Pipeline failed!'
-            script {
-                try {
-                    emailext (
-                        subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                        body: """
-                            <h2>❌ Pipeline Failed!</h2>
-                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                            <hr>
-                            <p>Please check the build logs for more details about the failure.</p>
-                        """,
-                        mimeType: 'text/html',
-                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                        replyTo: 'jenkins@example.com'
-                    )
-                } catch (Exception e) {
-                    echo "Email notification failed: ${e.getMessage()}"
+            node {
+                script {
+                    try {
+                        emailext (
+                            subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            body: """
+                                <h2>❌ Pipeline Failed!</h2>
+                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                                <hr>
+                                <p>Please check the build logs for more details about the failure.</p>
+                            """,
+                            mimeType: 'text/html',
+                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                            replyTo: 'jenkins@example.com'
+                        )
+                    } catch (Exception e) {
+                        echo "Email notification failed: ${e.getMessage()}"
+                    }
                 }
             }
         }
 
         unstable {
             echo '⚠️ Pipeline unstable!'
-            script {
-                try {
-                    emailext (
-                        subject: "⚠️ Build Unstable: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                        body: """
-                            <h2>⚠️ Pipeline Unstable!</h2>
-                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                            <hr>
-                            <p>The build completed but some tests or quality checks failed.</p>
-                        """,
-                        mimeType: 'text/html',
-                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                        replyTo: 'jenkins@example.com'
-                    )
-                } catch (Exception e) {
-                    echo "Email notification failed: ${e.getMessage()}"
+            node {
+                script {
+                    try {
+                        emailext (
+                            subject: "⚠️ Build Unstable: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            body: """
+                                <h2>⚠️ Pipeline Unstable!</h2>
+                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                                <hr>
+                                <p>The build completed but some tests or quality checks failed.</p>
+                            """,
+                            mimeType: 'text/html',
+                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                            replyTo: 'jenkins@example.com'
+                        )
+                    } catch (Exception e) {
+                        echo "Email notification failed: ${e.getMessage()}"
+                    }
                 }
             }
         }
