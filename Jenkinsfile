@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         // Variables SonarQube
-        SONAR_TOKEN = credentials('squ_957be0ba0db6a033a5a71511f65495804aca0645')
+        SONAR_TOKEN = credentials('sonar-token')
         SONAR_HOST_URL = 'http://localhost:9000'
 
         // Docker
