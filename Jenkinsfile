@@ -342,95 +342,87 @@ pipeline {
     post {
         always {
             echo '🧹 Cleaning up workspace...'
-            node {
-                script {
-                    try {
-                        sh 'docker image prune -f || echo "Docker cleanup completed"'
-                        sh 'docker container prune -f || echo "Container cleanup completed"'
-                    } catch (Exception e) {
-                        echo "Cleanup failed: ${e.getMessage()}"
-                    }
+            script {
+                try {
+                    sh 'docker image prune -f || echo "Docker cleanup completed"'
+                    sh 'docker container prune -f || echo "Container cleanup completed"'
+                } catch (Exception e) {
+                    echo "Cleanup failed: ${e.getMessage()}"
                 }
             }
         }
 
         success {
             echo '🎉 Pipeline completed successfully!'
-            node {
-                script {
-                    try {
-                        emailext (
-                            subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                            body: """
-                                <h2>🎉 Pipeline Completed Successfully!</h2>
-                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                                <hr>
-                                <p>All stages completed successfully including tests, security scans, and quality checks.</p>
-                            """,
-                            mimeType: 'text/html',
-                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                            replyTo: 'jenkins@example.com'
-                        )
-                    } catch (Exception e) {
-                        echo "Email notification failed: ${e.getMessage()}"
-                    }
+            script {
+                try {
+                    emailext (
+                        subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                            <h2>🎉 Pipeline Completed Successfully!</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                            <hr>
+                            <p>All stages completed successfully including tests, security scans, and quality checks.</p>
+                        """,
+                        mimeType: 'text/html',
+                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                        replyTo: 'jenkins@example.com'
+                    )
+                } catch (Exception e) {
+                    echo "Email notification failed: ${e.getMessage()}"
                 }
             }
         }
 
         failure {
             echo '❌ Pipeline failed!'
-            node {
-                script {
-                    try {
-                        emailext (
-                            subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                            body: """
-                                <h2>❌ Pipeline Failed!</h2>
-                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                                <hr>
-                                <p>Please check the build logs for more details about the failure.</p>
-                            """,
-                            mimeType: 'text/html',
-                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                            replyTo: 'jenkins@example.com'
-                        )
-                    } catch (Exception e) {
-                        echo "Email notification failed: ${e.getMessage()}"
-                    }
+            script {
+                try {
+                    emailext (
+                        subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                            <h2>❌ Pipeline Failed!</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                            <hr>
+                            <p>Please check the build logs for more details about the failure.</p>
+                        """,
+                        mimeType: 'text/html',
+                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                        replyTo: 'jenkins@example.com'
+                    )
+                } catch (Exception e) {
+                    echo "Email notification failed: ${e.getMessage()}"
                 }
             }
         }
 
         unstable {
             echo '⚠️ Pipeline unstable!'
-            node {
-                script {
-                    try {
-                        emailext (
-                            subject: "⚠️ Build Unstable: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                            body: """
-                                <h2>⚠️ Pipeline Unstable!</h2>
-                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                                <hr>
-                                <p>The build completed but some tests or quality checks failed.</p>
-                            """,
-                            mimeType: 'text/html',
-                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                            replyTo: 'jenkins@example.com'
-                        )
-                    } catch (Exception e) {
-                        echo "Email notification failed: ${e.getMessage()}"
-                    }
+            script {
+                try {
+                    emailext (
+                        subject: "⚠️ Build Unstable: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                            <h2>⚠️ Pipeline Unstable!</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                            <hr>
+                            <p>The build completed but some tests or quality checks failed.</p>
+                        """,
+                        mimeType: 'text/html',
+                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                        replyTo: 'jenkins@example.com'
+                    )
+                } catch (Exception e) {
+                    echo "Email notification failed: ${e.getMessage()}"
                 }
             }
         }
