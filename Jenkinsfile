@@ -1,8 +1,6 @@
 pipeline {
     agent any
 
-   
-
     environment {
         DOCKER_IMAGE = 'laravel-app'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
@@ -32,7 +30,7 @@ pipeline {
             steps {
                 echo '📦 Installing PHP dependencies...'
                 script {
-                    sh "${COMPOSER_PATH} install --optimize-autoloader --no-interaction"
+                    bat "${COMPOSER_PATH} install --optimize-autoloader --no-interaction"
                 }
             }
             post {
@@ -46,7 +44,7 @@ pipeline {
             steps {
                 echo '⚙️ Setting up Laravel environment...'
                 script {
-                    sh '''
+                    bat '''
                         copy .env.example .env 2>nul || echo ".env.example non trouvé, création d'un .env basique"
                         echo APP_ENV=testing >> .env
                         echo APP_DEBUG=true >> .env
@@ -55,8 +53,8 @@ pipeline {
                         echo CACHE_DRIVER=array >> .env
                         echo SESSION_DRIVER=array >> .env
                         echo QUEUE_DRIVER=sync >> .env
-                        ${PHP_PATH} artisan key:generate --force || echo APP_KEY=base64:$(openssl rand -base64 32) >> .env
-                        findstr "APP_KEY=base64:" .env >nul || echo APP_KEY=base64:$(openssl rand -base64 32) >> .env
+                        %PHP_PATH% artisan key:generate --force || echo APP_KEY=base64:%RANDOM%%RANDOM%%RANDOM% >> .env
+                        findstr "APP_KEY=base64:" .env >nul || echo APP_KEY=base64:%RANDOM%%RANDOM%%RANDOM% >> .env
                         echo Configuration Laravel pour les tests:
                         findstr "APP_ENV APP_DEBUG DB_CONNECTION APP_KEY" .env
                     '''
@@ -75,9 +73,9 @@ pipeline {
                     steps {
                         echo '🧪 Running Unit tests...'
                         script {
-                            sh '''
+                            bat '''
                                 set PCOV_ENABLED=1
-                                ${PHP_PATH} vendor/bin/phpunit --testsuite=Unit --coverage-clover coverage.xml --log-junit junit-unit.xml
+                                %PHP_PATH% vendor/bin/phpunit --testsuite=Unit --coverage-clover coverage.xml --log-junit junit-unit.xml
                             '''
                         }
                     }
@@ -101,9 +99,9 @@ pipeline {
                     steps {
                         echo '🧪 Running Feature tests...'
                         script {
-                            sh '''
+                            bat '''
                                 set PCOV_ENABLED=1
-                                ${PHP_PATH} vendor/bin/phpunit --testsuite=Feature --log-junit junit-feature.xml
+                                %PHP_PATH% vendor/bin/phpunit --testsuite=Feature --log-junit junit-feature.xml
                             '''
                         }
                     }
@@ -119,9 +117,9 @@ pipeline {
                     steps {
                         echo '🔒 Running Security scan...'
                         script {
-                            sh '''
-                                ${TRIVY_PATH} fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt || echo "Trivy scan completed"
-                                ${TRIVY_PATH} fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt || echo "Trivy composer scan completed"
+                            bat '''
+                                %TRIVY_PATH% fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt || echo "Trivy scan completed"
+                                %TRIVY_PATH% fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt || echo "Trivy composer scan completed"
                             '''
                         }
                     }
@@ -148,21 +146,21 @@ pipeline {
                             
                             if (fileExists('sonar-project.properties')) {
                                 withSonarQubeEnv('SonarQube') {
-                                    sh '''
+                                    bat '''
                                         echo Configuration SonarQube:
                                         type sonar-project.properties
-                                        ${SONAR_SCANNER_PATH} -Dsonar.login=${SONAR_TOKEN}
+                                        %SONAR_SCANNER_PATH% -Dsonar.login=%SONAR_TOKEN%
                                     '''
                                 }
                             } else {
                                 withSonarQubeEnv('SonarQube') {
-                                    sh '''
-                                        ${SONAR_SCANNER_PATH} ^
+                                    bat '''
+                                        %SONAR_SCANNER_PATH% ^
                                             -Dsonar.projectKey=laravel-multitenant ^
                                             -Dsonar.sources=app,config,database,resources,routes ^
                                             -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,tests/** ^
                                             -Dsonar.php.coverage.reportPaths=coverage.xml ^
-                                            -Dsonar.login=${SONAR_TOKEN}
+                                            -Dsonar.login=%SONAR_TOKEN%
                                     '''
                                 }
                             }
@@ -190,7 +188,7 @@ pipeline {
             steps {
                 echo '🧬 Running Mutation tests...'
                 script {
-                    sh '${PHP_PATH} vendor/bin/infection --min-msi=80 --min-covered-msi=80 --log-verbosity=all || echo "Infection échoué ou non installé"'
+                    bat '%PHP_PATH% vendor/bin/infection --min-msi=80 --min-covered-msi=80 --log-verbosity=all || echo "Infection échoué ou non installé"'
                 }
             }
             post {
@@ -214,9 +212,9 @@ pipeline {
                     steps {
                         echo '🐳 Building Docker image...'
                         script {
-                            sh '''
-                                docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
-                                docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
+                            bat '''
+                                docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% .
+                                docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_IMAGE%:latest
                             '''
                         }
                     }
@@ -231,8 +229,8 @@ pipeline {
                     steps {
                         echo '🔍 Scanning Docker image...'
                         script {
-                            sh '''
-                                ${TRIVY_PATH} image ${DOCKER_IMAGE}:${DOCKER_TAG} ^
+                            bat '''
+                                %TRIVY_PATH% image %DOCKER_IMAGE%:%DOCKER_TAG% ^
                                     --severity HIGH,CRITICAL ^
                                     --format table ^
                                     --output trivy-image-report.txt || echo "Docker image scan completed"
@@ -267,7 +265,7 @@ pipeline {
             steps {
                 echo '🔗 Running Integration tests...'
                 script {
-                    sh '''
+                    bat '''
                         docker compose up -d db
                         timeout /t 30 /nobreak
                         docker compose exec -T db mysql -uroot -pRoot@1234 -e "CREATE DATABASE IF NOT EXISTS laravel_multitenant_test;" || echo "Database creation completed"
@@ -305,12 +303,12 @@ pipeline {
                         echo '📤 Pushing to Docker Hub...'
                         script {
                             withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
-                                sh '''
-                                    echo ${DOCKER_PASSWORD} | docker login ${DOCKER_REGISTRY} -u ${DOCKER_USERNAME} --password-stdin
-                                    docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_USERNAME}/${DOCKER_IMAGE}:${DOCKER_TAG}
-                                    docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_USERNAME}/${DOCKER_IMAGE}:latest
-                                    docker push ${DOCKER_USERNAME}/${DOCKER_IMAGE}:${DOCKER_TAG}
-                                    docker push ${DOCKER_USERNAME}/${DOCKER_IMAGE}:latest
+                                bat '''
+                                    echo %DOCKER_PASSWORD% | docker login %DOCKER_REGISTRY% -u %DOCKER_USERNAME% --password-stdin
+                                    docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_USERNAME%/%DOCKER_IMAGE%:%DOCKER_TAG%
+                                    docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_USERNAME%/%DOCKER_IMAGE%:latest
+                                    docker push %DOCKER_USERNAME%/%DOCKER_IMAGE%:%DOCKER_TAG%
+                                    docker push %DOCKER_USERNAME%/%DOCKER_IMAGE%:latest
                                 '''
                             }
                         }
@@ -326,7 +324,7 @@ pipeline {
                     steps {
                         echo '🚀 Deploying to staging...'
                         script {
-                            sh 'docker compose -f docker-compose.staging.yml up -d || echo "Staging deployment completed"'
+                            bat 'docker compose -f docker-compose.staging.yml up -d || echo "Staging deployment completed"'
                         }
                     }
                     post {
@@ -344,8 +342,8 @@ pipeline {
             echo '🧹 Cleaning up workspace...'
             script {
                 try {
-                    sh 'docker image prune -f || echo "Docker cleanup completed"'
-                    sh 'docker container prune -f || echo "Container cleanup completed"'
+                    bat 'docker image prune -f || echo "Docker cleanup completed"'
+                    bat 'docker container prune -f || echo "Container cleanup completed"'
                 } catch (Exception e) {
                     echo "Cleanup failed: ${e.getMessage()}"
                 }
@@ -428,4 +426,3 @@ pipeline {
         }
     }
 }
-    
