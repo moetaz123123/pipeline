@@ -6,7 +6,7 @@ pipeline {
         DOCKER_TAG = "${env.BUILD_NUMBER}"
         SONAR_TOKEN = credentials('sonar-token')
         DOCKER_REGISTRY = 'docker.io'  // Docker Hub
-        DOCKER_USERNAME = 'moetaz1928
+        DOCKER_USERNAME = 'moetaz1928'
 
 '  // Remplacez par votre username
         // Utilisation des outils installés localement
