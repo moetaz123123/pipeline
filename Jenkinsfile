@@ -7,10 +7,10 @@ pipeline {
         SONAR_TOKEN = credentials('sonar-token')
         DOCKER_REGISTRY = 'docker.io'
         DOCKER_USERNAME = 'moetaz1928'
-        COMPOSER_PATH = tool('Composer')
-        PHP_PATH = tool('PHP 8.2')
-        TRIVY_PATH = tool('Trivy')
-        SONAR_SCANNER_PATH = tool('sonarqube')
+        COMPOSER_PATH = 'C:\\xampp\\composer\\composer.bat'
+        PHP_PATH = 'C:\\xampp\\php\\php.exe'
+        TRIVY_PATH = 'C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe'
+        SONARQUBE_URL = 'http://localhost:9000'
     }
 
     stages {
@@ -30,7 +30,7 @@ pipeline {
             steps {
                 echo '📦 Installing PHP dependencies...'
                 script {
-                    bat "${COMPOSER_PATH} install --optimize-autoloader --no-interaction"
+                    bat "\"${COMPOSER_PATH}\" install --optimize-autoloader --no-interaction"
                 }
             }
             post {
@@ -45,16 +45,26 @@ pipeline {
                 echo '⚙️ Setting up Laravel environment...'
                 script {
                     bat '''
-                        copy .env.example .env 2>nul || echo ".env.example non trouvé, création d'un .env basique"
-                        echo APP_ENV=testing >> .env
-                        echo APP_DEBUG=true >> .env
-                        echo DB_CONNECTION=sqlite >> .env
-                        echo DB_DATABASE=:memory: >> .env
-                        echo CACHE_DRIVER=array >> .env
-                        echo SESSION_DRIVER=array >> .env
-                        echo QUEUE_DRIVER=sync >> .env
-                        %PHP_PATH% artisan key:generate --force || echo APP_KEY=base64:%RANDOM%%RANDOM%%RANDOM% >> .env
-                        findstr "APP_KEY=base64:" .env >nul || echo APP_KEY=base64:%RANDOM%%RANDOM%%RANDOM% >> .env
+                        if exist .env.example (
+                            copy .env.example .env
+                        ) else (
+                            echo .env.example non trouvé, création d'un .env basique
+                        )
+                        echo APP_ENV=testing>> .env
+                        echo APP_DEBUG=true>> .env
+                        echo DB_CONNECTION=sqlite>> .env
+                        echo DB_DATABASE=:memory:>> .env
+                        echo CACHE_DRIVER=array>> .env
+                        echo SESSION_DRIVER=array>> .env
+                        echo QUEUE_DRIVER=sync>> .env
+                        "%PHP_PATH%" artisan key:generate --force
+                        if errorlevel 1 (
+                            echo APP_KEY=base64:%RANDOM%%RANDOM%%RANDOM%>> .env
+                        )
+                        findstr "APP_KEY=base64:" .env >nul
+                        if errorlevel 1 (
+                            echo APP_KEY=base64:%RANDOM%%RANDOM%%RANDOM%>> .env
+                        )
                         echo Configuration Laravel pour les tests:
                         findstr "APP_ENV APP_DEBUG DB_CONNECTION APP_KEY" .env
                     '''
@@ -75,7 +85,7 @@ pipeline {
                         script {
                             bat '''
                                 set PCOV_ENABLED=1
-                                %PHP_PATH% vendor/bin/phpunit --testsuite=Unit --coverage-clover coverage.xml --log-junit junit-unit.xml
+                                "%PHP_PATH%" vendor/bin/phpunit --testsuite=Unit --coverage-clover coverage.xml --log-junit junit-unit.xml
                             '''
                         }
                     }
@@ -101,7 +111,7 @@ pipeline {
                         script {
                             bat '''
                                 set PCOV_ENABLED=1
-                                %PHP_PATH% vendor/bin/phpunit --testsuite=Feature --log-junit junit-feature.xml
+                                "%PHP_PATH%" vendor/bin/phpunit --testsuite=Feature --log-junit junit-feature.xml
                             '''
                         }
                     }
@@ -118,8 +128,10 @@ pipeline {
                         echo '🔒 Running Security scan...'
                         script {
                             bat '''
-                                %TRIVY_PATH% fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt || echo "Trivy scan completed"
-                                %TRIVY_PATH% fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt || echo "Trivy composer scan completed"
+                                %TRIVY_PATH% fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt
+                                if errorlevel 1 echo Trivy scan completed
+                                %TRIVY_PATH% fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt
+                                if errorlevel 1 echo Trivy composer scan completed
                             '''
                         }
                     }
@@ -144,25 +156,29 @@ pipeline {
                         script {
                             echo "=== Début de l'analyse SonarQube ==="
                             
+                            bat '''
+                                curl -f %SONARQUBE_URL% >nul 2>&1
+                                if errorlevel 1 (
+                                    echo SonarQube non accessible, démarrage via Docker...
+                                    docker run -d --name sonarqube -p 9000:9000 sonarqube:latest
+                                    timeout /t 60 /nobreak
+                                )
+                            '''
+                            
                             if (fileExists('sonar-project.properties')) {
-                                withSonarQubeEnv('SonarQube') {
-                                    bat '''
-                                        echo Configuration SonarQube:
-                                        type sonar-project.properties
-                                        %SONAR_SCANNER_PATH% -Dsonar.login=%SONAR_TOKEN%
-                                    '''
-                                }
+                                bat '''
+                                    echo Configuration SonarQube:
+                                    type sonar-project.properties
+                                    docker run --rm -e SONAR_HOST_URL=%SONARQUBE_URL% -e SONAR_LOGIN=%SONAR_TOKEN% -v "%WORKSPACE%:/usr/src" sonarsource/sonar-scanner-cli
+                                '''
                             } else {
-                                withSonarQubeEnv('SonarQube') {
-                                    bat '''
-                                        %SONAR_SCANNER_PATH% ^
-                                            -Dsonar.projectKey=laravel-multitenant ^
-                                            -Dsonar.sources=app,config,database,resources,routes ^
-                                            -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,tests/** ^
-                                            -Dsonar.php.coverage.reportPaths=coverage.xml ^
-                                            -Dsonar.login=%SONAR_TOKEN%
-                                    '''
-                                }
+                                bat '''
+                                    docker run --rm -e SONAR_HOST_URL=%SONARQUBE_URL% -e SONAR_LOGIN=%SONAR_TOKEN% -v "%WORKSPACE%:/usr/src" sonarsource/sonar-scanner-cli ^
+                                        -Dsonar.projectKey=laravel-multitenant ^
+                                        -Dsonar.sources=app,config,database,resources,routes ^
+                                        -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,tests/** ^
+                                        -Dsonar.php.coverage.reportPaths=coverage.xml
+                                '''
                             }
 
                             echo "=== Fin de l'analyse SonarQube ==="
@@ -188,7 +204,8 @@ pipeline {
             steps {
                 echo '🧬 Running Mutation tests...'
                 script {
-                    bat '%PHP_PATH% vendor/bin/infection --min-msi=80 --min-covered-msi=80 --log-verbosity=all || echo "Infection échoué ou non installé"'
+                    bat '"%PHP_PATH%" vendor/bin/infection --min-msi=80 --min-covered-msi=80 --log-verbosity=all'
+                    bat 'if errorlevel 1 echo Infection échoué ou non installé'
                 }
             }
             post {
@@ -233,7 +250,8 @@ pipeline {
                                 %TRIVY_PATH% image %DOCKER_IMAGE%:%DOCKER_TAG% ^
                                     --severity HIGH,CRITICAL ^
                                     --format table ^
-                                    --output trivy-image-report.txt || echo "Docker image scan completed"
+                                    --output trivy-image-report.txt
+                                if errorlevel 1 echo Docker image scan completed
                             '''
                         }
                     }
@@ -268,9 +286,12 @@ pipeline {
                     bat '''
                         docker compose up -d db
                         timeout /t 30 /nobreak
-                        docker compose exec -T db mysql -uroot -pRoot@1234 -e "CREATE DATABASE IF NOT EXISTS laravel_multitenant_test;" || echo "Database creation completed"
-                        docker compose exec -T app php artisan migrate --env=testing || echo "Migration completed"
-                        docker compose exec -T app vendor/bin/phpunit --testsuite=Feature --log-junit junit-integration.xml || echo "Integration tests completed"
+                        docker compose exec -T db mysql -uroot -pRoot@1234 -e "CREATE DATABASE IF NOT EXISTS laravel_multitenant_test;"
+                        if errorlevel 1 echo Database creation completed
+                        docker compose exec -T app php artisan migrate --env=testing
+                        if errorlevel 1 echo Migration completed
+                        docker compose exec -T app vendor/bin/phpunit --testsuite=Feature --log-junit junit-integration.xml
+                        if errorlevel 1 echo Integration tests completed
                         docker compose down
                     '''
                 }
@@ -324,7 +345,8 @@ pipeline {
                     steps {
                         echo '🚀 Deploying to staging...'
                         script {
-                            bat 'docker compose -f docker-compose.staging.yml up -d || echo "Staging deployment completed"'
+                            bat 'docker compose -f docker-compose.staging.yml up -d'
+                            bat 'if errorlevel 1 echo Staging deployment completed'
                         }
                     }
                     post {
@@ -340,87 +362,97 @@ pipeline {
     post {
         always {
             echo '🧹 Cleaning up workspace...'
-            script {
-                try {
-                    bat 'docker image prune -f || echo "Docker cleanup completed"'
-                    bat 'docker container prune -f || echo "Container cleanup completed"'
-                } catch (Exception e) {
-                    echo "Cleanup failed: ${e.getMessage()}"
+            node('Jenkins') {
+                script {
+                    try {
+                        bat 'docker image prune -f'
+                        bat 'if errorlevel 1 echo Docker cleanup completed'
+                        bat 'docker container prune -f'
+                        bat 'if errorlevel 1 echo Container cleanup completed'
+                    } catch (Exception e) {
+                        echo "Cleanup failed: ${e.getMessage()}"
+                    }
                 }
             }
         }
 
         success {
             echo '🎉 Pipeline completed successfully!'
-            script {
-                try {
-                    emailext (
-                        subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                        body: """
-                            <h2>🎉 Pipeline Completed Successfully!</h2>
-                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                            <hr>
-                            <p>All stages completed successfully including tests, security scans, and quality checks.</p>
-                        """,
-                        mimeType: 'text/html',
-                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                        replyTo: 'jenkins@example.com'
-                    )
-                } catch (Exception e) {
-                    echo "Email notification failed: ${e.getMessage()}"
+            node('Jenkins') {
+                script {
+                    try {
+                        emailext (
+                            subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            body: """
+                                <h2>🎉 Pipeline Completed Successfully!</h2>
+                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                                <hr>
+                                <p>All stages completed successfully including tests, security scans, and quality checks.</p>
+                            """,
+                            mimeType: 'text/html',
+                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                            replyTo: 'jenkins@example.com'
+                        )
+                    } catch (Exception e) {
+                        echo "Email notification failed: ${e.getMessage()}"
+                    }
                 }
             }
         }
 
         failure {
             echo '❌ Pipeline failed!'
-            script {
-                try {
-                    emailext (
-                        subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                        body: """
-                            <h2>❌ Pipeline Failed!</h2>
-                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                            <hr>
-                            <p>Please check the build logs for more details about the failure.</p>
-                        """,
-                        mimeType: 'text/html',
-                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                        replyTo: 'jenkins@example.com'
-                    )
-                } catch (Exception e) {
-                    echo "Email notification failed: ${e.getMessage()}"
+            node('Jenkins') {
+                script {
+                    try {
+                        emailext (
+                            subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            body: """
+                                <h2>❌ Pipeline Failed!</h2>
+                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                                <hr>
+                                <p>Please check the build logs for more details about the failure.</p>
+                            """,
+                            mimeType: 'text/html',
+                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                            replyTo: 'jenkins@example.com'
+                        )
+                    } catch (Exception e) {
+                        echo "Email notification failed: ${e.getMessage()}"
+                    }
                 }
             }
         }
 
         unstable {
             echo '⚠️ Pipeline unstable!'
-            script {
-                try {
-                    emailext (
-                        subject: "⚠️ Build Unstable: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                        body: """
-                            <h2>⚠️ Pipeline Unstable!</h2>
-                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                            <hr>
-                            <p>The build completed but some tests or quality checks failed.</p>
-                        """,
-                        mimeType: 'text/html',
-                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                        replyTo: 'jenkins@example.com'
-                    )
-                } catch (Exception e) {
-                    echo "Email notification failed: ${e.getMessage()}"
+            node('Jenkins') {
+                script {
+                    try {
+                        emailext (
+                            subject: "⚠️ Build Unstable: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            body: """
+                                <h2>⚠️ Pipeline Unstable!</h2>
+                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                                <hr>
+                                <p>The build completed but some tests or quality checks failed.</p>
+                            """,
+                            mimeType: 'text/html',
+                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                            replyTo: 'jenkins@example.com'
+                        )
+                    } catch (Exception e) {
+                        echo "Email notification failed: ${e.getMessage()}"
+                    }
                 }
             }
         }
