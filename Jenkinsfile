@@ -1,43 +1,38 @@
 pipeline {
     agent any
-    
+
     environment {
         DOCKER_IMAGE = 'laravel-multitenant'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
         SONAR_TOKEN = credentials('sonar-token')
         DOCKER_REGISTRY = 'docker.io'  // Docker Hub
-        DOCKER_USERNAME = 'moetaz1928'
-
-'  // Remplacez par votre username
-        // Utilisation des outils installés localement
+        DOCKER_USERNAME = 'moetaz1928' // Remplacez par votre username Docker Hub
         COMPOSER_PATH = '/usr/local/bin/composer'
         PHP_PATH = '/usr/bin/php'
     }
-    
+
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
-        
+
         stage('Install Dependencies') {
             steps {
                 script {
-                    // Installer avec les dépendances de développement pour les tests
                     sh '${COMPOSER_PATH} install --optimize-autoloader'
                 }
             }
         }
-        
+
         stage('Setup Laravel') {
             steps {
                 script {
                     sh '''
-                        # Copier le fichier d'environnement
                         cp .env.example .env || echo ".env.example non trouvé, création d'un .env basique"
-                        
-                        # Configuration pour les tests
+
                         echo "APP_ENV=testing" >> .env
                         echo "APP_DEBUG=true" >> .env
                         echo "DB_CONNECTION=sqlite" >> .env
@@ -45,30 +40,27 @@ pipeline {
                         echo "CACHE_DRIVER=array" >> .env
                         echo "SESSION_DRIVER=array" >> .env
                         echo "QUEUE_DRIVER=sync" >> .env
-                        
-                        # Générer la clé d'application avec une valeur par défaut si échec
+
                         ${PHP_PATH} artisan key:generate --force || echo "APP_KEY=base64:$(openssl rand -base64 32)" >> .env
-                        
-                        # Vérifier que la clé est bien définie
+
                         if ! grep -q "APP_KEY=base64:" .env; then
                             echo "APP_KEY=base64:$(openssl rand -base64 32)" >> .env
                         fi
-                        
-                        # Afficher la configuration pour debug
+
                         echo "Configuration Laravel pour les tests:"
                         grep -E "APP_ENV|APP_DEBUG|DB_CONNECTION|APP_KEY" .env
                     '''
                 }
             }
         }
-        
+
         stage('Code Quality & Security') {
             parallel {
+
                 stage('Unit Tests') {
                     steps {
                         script {
                             sh '''
-                                # Activer PCOV pour la couverture de code
                                 export PCOV_ENABLED=1
                                 ${PHP_PATH} vendor/bin/phpunit --testsuite=Unit --coverage-clover coverage.xml --log-junit junit-unit.xml
                             '''
@@ -88,12 +80,11 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('Feature Tests') {
                     steps {
                         script {
                             sh '''
-                                # Activer PCOV pour la couverture de code
                                 export PCOV_ENABLED=1
                                 ${PHP_PATH} vendor/bin/phpunit --testsuite=Feature --log-junit junit-feature.xml
                             '''
@@ -105,7 +96,7 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('Security Scan') {
                     steps {
                         script {
@@ -128,27 +119,22 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('SonarQube Analysis') {
                     steps {
                         script {
                             echo "=== Début de l'analyse SonarQube ==="
-                            
-                            // Vérifier si sonar-scanner est disponible
+
                             def scannerAvailable = sh(
                                 script: 'command -v sonar-scanner &> /dev/null && echo "available" || echo "not_available"',
                                 returnStdout: true
                             ).trim()
-                            
+
                             echo "SonarQube Scanner disponible: ${scannerAvailable}"
-                            
+
                             if (scannerAvailable == 'available') {
-                                echo "SonarQube Scanner trouvé, lancement de l'analyse..."
-                                
-                                // Vérifier que le fichier de configuration existe
                                 if (fileExists('sonar-project.properties')) {
                                     echo "Fichier sonar-project.properties trouvé"
-                                    
                                     withSonarQubeEnv('SonarQube') {
                                         sh '''
                                             echo "Configuration SonarQube:"
@@ -172,9 +158,8 @@ pipeline {
                                 }
                             } else {
                                 echo "SonarQube Scanner non installé, étape ignorée"
-                                echo "Pour installer: wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip"
                             }
-                            
+
                             echo "=== Fin de l'analyse SonarQube ==="
                         }
                     }
@@ -184,9 +169,10 @@ pipeline {
                         }
                     }
                 }
+
             }
         }
-        
+
         stage('Mutation Tests') {
             steps {
                 script {
@@ -206,9 +192,10 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Build & Security') {
             parallel {
+
                 stage('Build Docker Image') {
                     steps {
                         script {
@@ -219,7 +206,7 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('Scan Docker Image') {
                     steps {
                         script {
@@ -244,9 +231,10 @@ pipeline {
                         }
                     }
                 }
+
             }
         }
-        
+
         stage('Integration Tests') {
             steps {
                 script {
@@ -266,12 +254,13 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Deploy') {
             when {
                 branch 'main'
             }
             parallel {
+
                 stage('Push to Registry') {
                     steps {
                         script {
@@ -287,7 +276,7 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('Deploy to Staging') {
                     steps {
                         script {
@@ -295,36 +284,35 @@ pipeline {
                         }
                     }
                 }
+
             }
         }
     }
-    
+
     post {
         always {
             sh '''
                 docker image prune -f
                 docker container prune -f
             '''
-        }
-        
-        success {
-            emailext (
-                subject: "Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Build completed successfully. See: ${env.BUILD_URL}",
-                recipientProviders: [[$class: 'DevelopersRecipientProvider']]
-            )
-        }
-        
-        failure {
-            emailext (
-                subject: "Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Build failed. See: ${env.BUILD_URL}",
-                recipientProviders: [[$class: 'DevelopersRecipientProvider']]
-            )
-        }
-        
-        cleanup {
             cleanWs()
         }
+
+        success {
+            emailext (
+                subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "🎉 Build terminé avec succès.\n\nVoir les détails ici : ${env.BUILD_URL}",
+                recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+            )
+        }
+
+        failure {
+            emailext (
+                subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Le build a échoué.\n\nVoir les logs ici : ${env.BUILD_URL}",
+                recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+            )
+        }
     }
-} 
+}
+
