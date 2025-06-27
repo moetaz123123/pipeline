@@ -1,14 +1,22 @@
 pipeline {
     agent any
 
+    tools {
+        php 'PHP 8.2'
+        maven 'Maven 3.9'
+        jdk 'JDK 17'
+    }
+
     environment {
         DOCKER_IMAGE = 'laravel-app'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
         SONAR_TOKEN = credentials('sonar-token')
         DOCKER_REGISTRY = 'docker.io'
         DOCKER_USERNAME = 'moetaz1928'
-        COMPOSER_PATH = '/usr/local/bin/composer'
-        PHP_PATH = '/usr/bin/php'
+        COMPOSER_PATH = tool('Composer')
+        PHP_PATH = tool('PHP 8.2')
+        TRIVY_PATH = tool('Trivy')
+        SONAR_SCANNER_PATH = tool('sonarqube')
     }
 
     stages {
@@ -28,7 +36,7 @@ pipeline {
             steps {
                 echo '📦 Installing PHP dependencies...'
                 script {
-                    sh "${COMPOSER_PATH} install --optimize-autoloader"
+                    sh "${COMPOSER_PATH} install --optimize-autoloader --no-interaction"
                 }
             }
             post {
@@ -118,8 +126,8 @@ pipeline {
                         echo '🔒 Running Security scan...'
                         script {
                             sh '''
-                                trivy fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt || echo "Trivy scan completed"
-                                trivy fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt || echo "Trivy composer scan completed"
+                                ${TRIVY_PATH} fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt || echo "Trivy scan completed"
+                                ${TRIVY_PATH} fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt || echo "Trivy composer scan completed"
                             '''
                         }
                     }
@@ -143,35 +151,26 @@ pipeline {
                         echo '📊 Running SonarQube analysis...'
                         script {
                             echo "=== Début de l'analyse SonarQube ==="
-                            def scannerAvailable = sh(
-                                script: 'command -v sonar-scanner &> /dev/null && echo "available" || echo "not_available"',
-                                returnStdout: true
-                            ).trim()
-                            echo "SonarQube Scanner disponible: ${scannerAvailable}"
-
-                            if (scannerAvailable == 'available') {
-                                if (fileExists('sonar-project.properties')) {
-                                    withSonarQubeEnv('SonarQube') {
-                                        sh '''
-                                            echo "Configuration SonarQube:"
-                                            cat sonar-project.properties
-                                            sonar-scanner -Dsonar.login=${SONAR_TOKEN}
-                                        '''
-                                    }
-                                } else {
-                                    withSonarQubeEnv('SonarQube') {
-                                        sh '''
-                                            sonar-scanner \
-                                                -Dsonar.projectKey=laravel-multitenant \
-                                                -Dsonar.sources=app,config,database,resources,routes \
-                                                -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,tests/** \
-                                                -Dsonar.php.coverage.reportPaths=coverage.xml \
-                                                -Dsonar.login=${SONAR_TOKEN}
-                                        '''
-                                    }
+                            
+                            if (fileExists('sonar-project.properties')) {
+                                withSonarQubeEnv('SonarQube') {
+                                    sh '''
+                                        echo "Configuration SonarQube:"
+                                        cat sonar-project.properties
+                                        ${SONAR_SCANNER_PATH} -Dsonar.login=${SONAR_TOKEN}
+                                    '''
                                 }
                             } else {
-                                echo "SonarQube Scanner non installé"
+                                withSonarQubeEnv('SonarQube') {
+                                    sh '''
+                                        ${SONAR_SCANNER_PATH} \
+                                            -Dsonar.projectKey=laravel-multitenant \
+                                            -Dsonar.sources=app,config,database,resources,routes \
+                                            -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,tests/** \
+                                            -Dsonar.php.coverage.reportPaths=coverage.xml \
+                                            -Dsonar.login=${SONAR_TOKEN}
+                                    '''
+                                }
                             }
 
                             echo "=== Fin de l'analyse SonarQube ==="
@@ -239,7 +238,7 @@ pipeline {
                         echo '🔍 Scanning Docker image...'
                         script {
                             sh '''
-                                trivy image ${DOCKER_IMAGE}:${DOCKER_TAG} \
+                                ${TRIVY_PATH} image ${DOCKER_IMAGE}:${DOCKER_TAG} \
                                     --severity HIGH,CRITICAL \
                                     --format table \
                                     --output trivy-image-report.txt || echo "Docker image scan completed"
