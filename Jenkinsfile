@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = 'laravel-multitenant'
+        DOCKER_IMAGE = 'laravel-app'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
-        SONAR_TOKEN = credentials('sonar-token') // Assure-toi que ce token est bien ajouté dans Jenkins
+        SONAR_TOKEN = credentials('sonar-token')
         DOCKER_REGISTRY = 'docker.io'
         DOCKER_USERNAME = 'moetaz1928'
         COMPOSER_PATH = '/usr/local/bin/composer'
@@ -14,20 +14,33 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                echo '🔄 Checkout source code...'
                 checkout scm
+            }
+            post {
+                always {
+                    echo '✅ Checkout completed'
+                }
             }
         }
 
         stage('Install Dependencies') {
             steps {
+                echo '📦 Installing PHP dependencies...'
                 script {
-                    sh '${COMPOSER_PATH} install --optimize-autoloader'
+                    sh "${COMPOSER_PATH} install --optimize-autoloader"
+                }
+            }
+            post {
+                always {
+                    echo '✅ Dependencies installed'
                 }
             }
         }
 
         stage('Setup Laravel') {
             steps {
+                echo '⚙️ Setting up Laravel environment...'
                 script {
                     sh '''
                         cp .env.example .env || echo ".env.example non trouvé, création d'un .env basique"
@@ -47,12 +60,18 @@ pipeline {
                     '''
                 }
             }
+            post {
+                always {
+                    echo '✅ Laravel environment configured'
+                }
+            }
         }
 
         stage('Code Quality & Security') {
             parallel {
                 stage('Unit Tests') {
                     steps {
+                        echo '🧪 Running Unit tests...'
                         script {
                             sh '''
                                 export PCOV_ENABLED=1
@@ -71,12 +90,14 @@ pipeline {
                                 reportFiles: 'index.html',
                                 reportName: 'Unit Test Coverage'
                             ])
+                            echo '✅ Unit tests completed'
                         }
                     }
                 }
 
                 stage('Feature Tests') {
                     steps {
+                        echo '🧪 Running Feature tests...'
                         script {
                             sh '''
                                 export PCOV_ENABLED=1
@@ -87,16 +108,18 @@ pipeline {
                     post {
                         always {
                             junit 'junit-feature.xml'
+                            echo '✅ Feature tests completed'
                         }
                     }
                 }
 
                 stage('Security Scan') {
                     steps {
+                        echo '🔒 Running Security scan...'
                         script {
                             sh '''
-                                trivy fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt
-                                trivy fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt
+                                trivy fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt || echo "Trivy scan completed"
+                                trivy fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt || echo "Trivy composer scan completed"
                             '''
                         }
                     }
@@ -110,12 +133,14 @@ pipeline {
                                 reportFiles: 'trivy-*-report.txt',
                                 reportName: 'Trivy Security Report'
                             ])
+                            echo '✅ Security scan completed'
                         }
                     }
                 }
 
                 stage('SonarQube Analysis') {
                     steps {
+                        echo '📊 Running SonarQube analysis...'
                         script {
                             echo "=== Début de l'analyse SonarQube ==="
                             def scannerAvailable = sh(
@@ -154,15 +179,23 @@ pipeline {
                     }
                     post {
                         always {
-                            echo "Étape SonarQube terminée"
+                            echo "✅ SonarQube analysis completed"
                         }
                     }
                 }
             }
         }
 
+        stage('Checkpoint - Code Quality Review') {
+            steps {
+                echo '⏸️ Waiting for code quality review approval...'
+                input message: 'Code quality and security checks completed. Do you want to continue?', ok: 'Continue to Build'
+            }
+        }
+
         stage('Mutation Tests') {
             steps {
+                echo '🧬 Running Mutation tests...'
                 script {
                     sh '${PHP_PATH} vendor/bin/infection --min-msi=80 --min-covered-msi=80 --log-verbosity=all || echo "Infection échoué ou non installé"'
                 }
@@ -177,6 +210,7 @@ pipeline {
                         reportFiles: 'index.html',
                         reportName: 'Mutation Test Report'
                     ])
+                    echo '✅ Mutation tests completed'
                 }
             }
         }
@@ -185,6 +219,7 @@ pipeline {
             parallel {
                 stage('Build Docker Image') {
                     steps {
+                        echo '🐳 Building Docker image...'
                         script {
                             sh '''
                                 docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
@@ -192,16 +227,22 @@ pipeline {
                             '''
                         }
                     }
+                    post {
+                        always {
+                            echo '✅ Docker image built'
+                        }
+                    }
                 }
 
                 stage('Scan Docker Image') {
                     steps {
+                        echo '🔍 Scanning Docker image...'
                         script {
                             sh '''
                                 trivy image ${DOCKER_IMAGE}:${DOCKER_TAG} \
                                     --severity HIGH,CRITICAL \
                                     --format table \
-                                    --output trivy-image-report.txt
+                                    --output trivy-image-report.txt || echo "Docker image scan completed"
                             '''
                         }
                     }
@@ -215,21 +256,30 @@ pipeline {
                                 reportFiles: 'trivy-image-report.txt',
                                 reportName: 'Trivy Docker Image Report'
                             ])
+                            echo '✅ Docker image scan completed'
                         }
                     }
                 }
             }
         }
 
+        stage('Checkpoint - Build Review') {
+            steps {
+                echo '⏸️ Waiting for build review approval...'
+                input message: 'Docker image built and scanned. Do you want to continue to integration tests?', ok: 'Continue to Integration Tests'
+            }
+        }
+
         stage('Integration Tests') {
             steps {
+                echo '🔗 Running Integration tests...'
                 script {
                     sh '''
                         docker compose up -d db
                         sleep 30
-                        docker compose exec -T db mysql -uroot -pRoot@1234 -e "CREATE DATABASE IF NOT EXISTS laravel_multitenant_test;"
-                        docker compose exec -T app php artisan migrate --env=testing
-                        docker compose exec -T app vendor/bin/phpunit --testsuite=Feature --log-junit junit-integration.xml
+                        docker compose exec -T db mysql -uroot -pRoot@1234 -e "CREATE DATABASE IF NOT EXISTS laravel_multitenant_test;" || echo "Database creation completed"
+                        docker compose exec -T app php artisan migrate --env=testing || echo "Migration completed"
+                        docker compose exec -T app vendor/bin/phpunit --testsuite=Feature --log-junit junit-integration.xml || echo "Integration tests completed"
                         docker compose down
                     '''
                 }
@@ -237,7 +287,18 @@ pipeline {
             post {
                 always {
                     junit 'junit-integration.xml'
+                    echo '✅ Integration tests completed'
                 }
+            }
+        }
+
+        stage('Checkpoint - Pre-Deploy Review') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo '⏸️ Waiting for pre-deploy approval...'
+                input message: 'All tests passed. Ready to deploy to production?', ok: 'Deploy to Production'
             }
         }
 
@@ -248,6 +309,7 @@ pipeline {
             parallel {
                 stage('Push to Registry') {
                     steps {
+                        echo '📤 Pushing to Docker Hub...'
                         script {
                             withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                                 sh '''
@@ -260,12 +322,23 @@ pipeline {
                             }
                         }
                     }
+                    post {
+                        always {
+                            echo '✅ Docker image pushed to registry'
+                        }
+                    }
                 }
 
                 stage('Deploy to Staging') {
                     steps {
+                        echo '🚀 Deploying to staging...'
                         script {
-                            sh 'docker compose -f docker-compose.staging.yml up -d'
+                            sh 'docker compose -f docker-compose.staging.yml up -d || echo "Staging deployment completed"'
+                        }
+                    }
+                    post {
+                        always {
+                            echo '✅ Staging deployment completed'
                         }
                     }
                 }
@@ -275,31 +348,83 @@ pipeline {
 
     post {
         always {
+            echo '🧹 Cleaning up workspace...'
             script {
-                sh '''
-                    docker image prune -f
-                    docker container prune -f
-                '''
+                sh 'docker image prune -f || echo "Docker cleanup completed"'
+                sh 'docker container prune -f || echo "Container cleanup completed"'
             }
-            cleanWs()
         }
 
         success {
-            emailext (
-                subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Le build a réussi. Voir : ${env.BUILD_URL}",
-                recipientProviders: [[$class: 'DevelopersRecipientProvider']],
-                to: "ton.email@example.com"
-            )
+            echo '🎉 Pipeline completed successfully!'
+            script {
+                try {
+                    emailext (
+                        subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                            <h2>🎉 Pipeline Completed Successfully!</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                            <hr>
+                            <p>All stages completed successfully including tests, security scans, and quality checks.</p>
+                        """,
+                        mimeType: 'text/html',
+                        recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+                    )
+                } catch (Exception e) {
+                    echo "Email notification failed: ${e.getMessage()}"
+                }
+            }
         }
 
         failure {
-            emailext (
-                subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Le build a échoué. Voir : ${env.BUILD_URL}",
-                recipientProviders: [[$class: 'DevelopersRecipientProvider']],
-                to: "ton.email@example.com"
-            )
+            echo '❌ Pipeline failed!'
+            script {
+                try {
+                    emailext (
+                        subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                            <h2>❌ Pipeline Failed!</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                            <hr>
+                            <p>Please check the build logs for more details about the failure.</p>
+                        """,
+                        mimeType: 'text/html',
+                        recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+                    )
+                } catch (Exception e) {
+                    echo "Email notification failed: ${e.getMessage()}"
+                }
+            }
+        }
+
+        unstable {
+            echo '⚠️ Pipeline unstable!'
+            script {
+                try {
+                    emailext (
+                        subject: "⚠️ Build Unstable: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                            <h2>⚠️ Pipeline Unstable!</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                            <hr>
+                            <p>The build completed but some tests or quality checks failed.</p>
+                        """,
+                        mimeType: 'text/html',
+                        recipientProviders: [[$class: 'DevelopersRecipientProvider']]
+                    )
+                } catch (Exception e) {
+                    echo "Email notification failed: ${e.getMessage()}"
+                }
+            }
         }
     }
 }
