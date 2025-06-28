@@ -131,16 +131,63 @@ pipeline {
 
                 stage('Security Scan') {
                     steps {
-                        echo '🔒 Running Trivy scan (HTML report)...'
+                        echo '🔒 Running Trivy scan (identique au terminal)...'
                         script {
                             bat '''
-                                docker run --rm -v "%cd%:/app" aquasec/trivy:latest fs /app --skip-files vendor/laravel/pint/builds/pint --format html --output trivy-report.html --timeout 600s
+                                echo Début du scan Trivy (même commande que terminal)...
+                                docker run --rm -v "%cd%:/app" aquasec/trivy:latest fs /app --skip-files vendor/laravel/pint/builds/pint --format table --output trivy-report.txt --timeout 600s
+                                if errorlevel 1 (
+                                    echo Docker Trivy scan failed with error code %errorlevel%
+                                    echo "Docker Trivy scan failed - Error code: %errorlevel%" > trivy-report.txt
+                                    echo "Please check the logs above for details" >> trivy-report.txt
+                                ) else (
+                                    echo Docker Trivy scan completed successfully
+                                )
+                                
+                                echo Vérification du fichier de rapport...
+                                if exist trivy-report.txt (
+                                    echo Fichier trivy-report.txt trouvé
+                                    echo ========================================
+                                    echo RAPPORT TRIVY COMPLET:
+                                    echo ========================================
+                                    type trivy-report.txt
+                                    echo ========================================
+                                ) else (
+                                    echo Fichier trivy-report.txt non trouvé, création d'un rapport d'erreur
+                                    echo "Docker Trivy scan completed but report file not found" > trivy-report.txt
+                                    echo "This might indicate a silent failure in Docker Trivy" >> trivy-report.txt
+                                )
                             '''
                         }
                     }
                     post {
                         always {
-                            archiveArtifacts artifacts: 'trivy-report.html', allowEmptyArchive: true
+                            script {
+                                if (fileExists('trivy-report.txt')) {
+                                    def report = readFile('trivy-report.txt')
+                                    echo "========================================"
+                                    echo "RAPPORT TRIVY COMPLET (AFFICHAGE JENKINS):"
+                                    echo "========================================"
+                                    echo "${report}"
+                                    echo "========================================"
+                                } else {
+                                    echo "❌ Fichier trivy-report.txt non trouvé"
+                                    echo "Création d'un rapport d'erreur..."
+                                    writeFile file: 'trivy-report.txt', text: '''Docker Trivy scan failed - No report file generated
+This could be due to:
+1. Docker not running
+2. Docker permissions issues
+3. Network connectivity problems
+4. Docker image pull issues
+
+Please check:
+- Docker is running
+- Docker permissions for Jenkins user
+- Network connectivity
+- Docker image availability'''
+                                }
+                            }
+                            archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
                             echo '✅ Security scan completed'
                         }
                     }
@@ -157,13 +204,13 @@ pipeline {
                                         echo Tests avec coverage terminés avec des avertissements
                                         exit /b 0
                                     )
-                                    "%SONAR_SCANNER_PATH%" ^
+                                    sonar-scanner ^
                                         -Dsonar.projectKey=laravel-app ^
                                         -Dsonar.php.coverage.reportPaths=coverage.xml ^
                                         -Dsonar.sources=app ^
                                         -Dsonar.tests=tests ^
                                         -Dsonar.host.url=http://localhost:9000 ^
-                                        -Dsonar.login=%SONAR_AUTH_TOKEN%
+                                        -Dsonar.login=%SONAR_TOKEN%
                                 '''
                             }
                         }
@@ -193,7 +240,7 @@ pipeline {
                     bat '''
                         docker run --rm -v "%cd%:/app" --network host cnescatlab/sonar-cnes-report:latest ^
                           -s http://localhost:9000 ^
-                          -t %SONAR_AUTH_TOKEN% ^
+                          -t %SONAR_TOKEN% ^
                           -p laravel-app ^
                           -o sonar-report.html
                         if errorlevel 1 (
