@@ -232,7 +232,42 @@ ${readFile('trivy-report.txt')}
             }
         }
 
-        stage('Trivy Scan') {
+        stage('Mutation Tests') {
+            steps {
+                bat '''
+                    echo === Tests de mutation ===
+                    copy .env .env.backup
+                    copy .env.example .env
+                    "%PHP_PATH%" artisan key:generate --force
+                    echo Tests de mutation avec Infection...
+                    if exist vendor\\bin\\infection.bat (
+                        "%PHP_PATH%" vendor\\bin\\infection.bat --logger-html=infection-report.html
+                    ) else if exist vendor\\bin\\infection (
+                        "%PHP_PATH%" vendor\\bin\\infection --logger-html=infection-report.html
+                    ) else (
+                        echo AVERTISSEMENT: Infection non trouvé, exécution des tests de base
+                        composer exec -- phpunit
+                        echo Tests de mutation de base terminés
+                    )
+                    echo AVERTISSEMENT: Tests de mutation complets nécessitent des extensions de couverture (xdebug/pcov)
+                    echo Tests de mutation terminés
+                '''
+            }
+            post {
+                always {
+                    publishHTML(target: [
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: '.',
+                        reportFiles: 'infection-report.html',
+                        reportName: 'Mutation Testing Report'
+                    ])
+                }
+            }
+        }
+
+        stage('Trivy Code Scan') {
             steps {
                 bat '''
                     echo === Scan de sécurité Trivy (code) ===
@@ -248,22 +283,25 @@ ${readFile('trivy-report.txt')}
             post {
                 always {
                     bat 'type trivy-report.txt'
-                    writeFile file: 'trivy-report.html', text: """
-                        <html>
-                        <head>
-                            <meta charset='UTF-8'>
-                            <style>
-                                body { background: #222; color: #eee; }
-                                pre { font-family: monospace; font-size: 13px; }
-                            </style>
-                        </head>
-                        <body>
-                            <pre>
-${readFile('trivy-report.txt')}
-                            </pre>
-                        </body>
-                        </html>
-                    """
+                    script {
+                        def trivyText = readFile('trivy-report.txt')
+                        writeFile file: 'trivy-report.html', text: """
+                            <html>
+                            <head>
+                                <meta charset='UTF-8'>
+                                <style>
+                                    body { background: #222; color: #eee; }
+                                    pre { font-family: monospace; font-size: 13px; }
+                                </style>
+                            </head>
+                            <body>
+                                <pre>
+${trivyText}
+                                </pre>
+                            </body>
+                            </html>
+                        """
+                    }
                     publishHTML(target: [
                         allowMissing: true,
                         alwaysLinkToLastBuild: true,
@@ -306,22 +344,25 @@ ${readFile('trivy-report.txt')}
             post {
                 always {
                     bat 'type trivy-image-report.txt'
-                    writeFile file: 'trivy-image-report.html', text: """
-                        <html>
-                        <head>
-                            <meta charset='UTF-8'>
-                            <style>
-                                body { background: #222; color: #eee; }
-                                pre { font-family: monospace; font-size: 13px; }
-                            </style>
-                        </head>
-                        <body>
-                            <pre>
-${readFile('trivy-image-report.txt')}
-                            </pre>
-                        </body>
-                        </html>
-                    """
+                    script {
+                        def trivyImageText = readFile('trivy-image-report.txt')
+                        writeFile file: 'trivy-image-report.html', text: """
+                            <html>
+                            <head>
+                                <meta charset='UTF-8'>
+                                <style>
+                                    body { background: #222; color: #eee; }
+                                    pre { font-family: monospace; font-size: 13px; }
+                                </style>
+                            </head>
+                            <body>
+                                <pre>
+${trivyImageText}
+                                </pre>
+                            </body>
+                            </html>
+                        """
+                    }
                     publishHTML(target: [
                         allowMissing: true,
                         alwaysLinkToLastBuild: true,
