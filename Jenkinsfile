@@ -2,7 +2,7 @@ pipeline {
     agent any
     
    environment {
-        DOCKER_IMAGE = 'laravel-app'
+        DOCKER_IMAGE = 'laravel-multitenant'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
         SONAR_TOKEN = credentials('sonar-token')
         DOCKER_REGISTRY = 'docker.io'
@@ -128,9 +128,9 @@ pipeline {
                         script {
                             echo "=== Début de l'analyse SonarQube ==="
                             
-                            # Vérifier si sonar-scanner est disponible de manière plus robuste
+                            // Vérifier si sonar-scanner est disponible de manière plus robuste
                             def scannerPath = bat(
-                                script: 'which sonar-scanner 2>/dev/null || echo ""',
+                                script: 'where sonar-scanner',
                                 returnStdout: true
                             ).trim()
                             
@@ -139,7 +139,7 @@ pipeline {
                             if (scannerPath != "") {
                                 echo "SonarQube Scanner trouvé à: ${scannerPath}"
                                 
-                                # Vérifier que le fichier de configuration existe
+                                // Vérifier que le fichier de configuration existe
                                 if (fileExists('sonar-project.properties')) {
                                     echo "Fichier sonar-project.properties trouvé"
                                     
