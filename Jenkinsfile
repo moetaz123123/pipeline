@@ -217,6 +217,8 @@ ${readFile('trivy-report.txt')}
             steps {
                 bat '''
                     echo === Feature tests ===
+                    copy .env.example .env
+                    "%PHP_PATH%" artisan key:generate --force
                     composer exec -- phpunit --testsuite=Feature --log-junit junit-feature.xml
                     if errorlevel 1 (
                         echo ERREUR: Feature tests échoués
@@ -382,6 +384,8 @@ ${trivyImageText}
             steps {
                 bat '''
                     echo === Déploiement ===
+                    "%PHP_PATH%" artisan migrate --force
+                    "%PHP_PATH%" artisan db:seed --force
                     docker run -d --rm -p 8080:80 %DOCKER_IMAGE%
                     echo === Application déployée sur http://localhost:8080 ===
                 '''
