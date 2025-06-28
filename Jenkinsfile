@@ -224,7 +224,7 @@ Please check:
                             withSonarQubeEnv('sonarqube') {
                                 bat '''
                                     "%PHP_PATH%" vendor/bin/phpunit --coverage-clover=coverage.xml
-                                    "C:\\Users\\User\\Downloads\\sonarqube-25.6.0.109173\\sonarqube-25.6.0.109173\\bin\\sonar-scanner.bat" -Dsonar.projectKey=touza-project -Dsonar.php.coverage.reportPaths=coverage.xml -Dsonar.sources=app -Dsonar.tests=tests -Dsonar.host.url=http://localhost:9000
+                                    "C:\\Users\\User\\Downloads\\sonar-scanner-cli-7.1.0.4889-windows-x64\\sonar-scanner-7.1.0.4889-windows-x64\\bin\\sonar-scanner.bat" -Dsonar.projectKey=touza-project -Dsonar.php.coverage.reportPaths=coverage.xml -Dsonar.sources=app -Dsonar.tests=tests -Dsonar.host.url=http://localhost:9000
                                 '''
                             }
                         }
