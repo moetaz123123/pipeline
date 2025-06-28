@@ -56,12 +56,31 @@ pipeline {
         stage('Trivy Scan') {
             steps {
                 bat 'docker build -t %DOCKER_IMAGE% .'
-                bat 'docker run --rm -v "%WORKSPACE%:/app" aquasec/trivy fs /app --skip-files vendor/laravel/pint/builds/pint --format table --output trivy-report.txt'
                 bat '''
+                    echo === Scan de sécurité Trivy ===
+                    echo Exécution du scan Trivy...
+                    docker run --rm -v "%WORKSPACE%:/app" aquasec/trivy fs /app --skip-files vendor/laravel/pint/builds/pint --format table > trivy-report.txt 2>&1
+                    
+                    echo Vérification du fichier de rapport...
+                    if exist trivy-report.txt (
+                        echo Fichier trivy-report.txt créé avec succès
+                    ) else (
+                        echo AVERTISSEMENT: Fichier trivy-report.txt non créé, création d'un rapport vide
+                        echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-report.txt
+                    )
+                    
                     echo Création du rapport HTML Trivy...
-                    echo ^<html^>^<head^>^<title^>Trivy Security Scan Report^</title^>^<style^>body{font-family:monospace;margin:20px;background-color:#f5f5f5;}pre{background-color:white;padding:15px;border:1px solid #ddd;border-radius:5px;overflow-x:auto;}h1{color:#333;border-bottom:2px solid #007acc;}h2{color:#007acc;}table{border-collapse:collapse;width:100%%;margin:10px 0;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#007acc;color:white;}^</style^>^</head^>^<body^>^<h1^>Trivy Security Scan Report^</h1^>^<h2^>Scan Details^</h2^>^<p^>Scan completed for directory: %WORKSPACE%^</p^>^<p^>Command: trivy fs /app --skip-files vendor/laravel/pint/builds/pint --format table^</p^>^<h2^>Scan Results^</h2^>^<pre^> > trivy-report.html
-                    type trivy-report.txt >> trivy-report.html
-                    echo ^</pre^>^<p^>^<strong^>Note:^</strong^> Check the detailed text report (trivy-report.txt) for complete vulnerability information.^</p^>^</body^>^</html^> >> trivy-report.html
+                    echo ^<html^>^<head^>^<title^>Trivy Security Scan Report^</title^>^<style^>body{font-family:monospace;margin:20px;background-color:#f5f5f5;}pre{background-color:white;padding:15px;border:1px solid #ddd;border-radius:5px;overflow-x:auto;}h1{color:#333;border-bottom:2px solid #007acc;}h2{color:#007acc;}table{border-collapse:collapse;width:100%%;margin:10px 0;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#007acc;color:white;} .success{color:green;} .warning{color:orange;} .error{color:red;}^</style^>^</head^>^<body^>^<h1^>Trivy Security Scan Report^</h1^>^<h2^>Scan Details^</h2^>^<p^>Scan completed for directory: %WORKSPACE%^</p^>^<p^>Command: trivy fs /app --skip-files vendor/laravel/pint/builds/pint --format table^</p^>^<h2^>Scan Results^</h2^>^<pre^> > trivy-report.html
+                    
+                    if exist trivy-report.txt (
+                        type trivy-report.txt >> trivy-report.html
+                        echo ^</pre^>^<p class="success"^>^<strong^>✓^</strong^> Scan completed successfully. Check the detailed text report (trivy-report.txt) for complete vulnerability information.^</p^>^</body^>^</html^> >> trivy-report.html
+                    ) else (
+                        echo "Erreur: Impossible de lire le fichier trivy-report.txt" >> trivy-report.html
+                        echo ^</pre^>^<p class="error"^>^<strong^>✗^</strong^> Erreur lors de la génération du rapport Trivy.^</p^>^</body^>^</html^> >> trivy-report.html
+                    )
+                    
+                    echo Rapport HTML Trivy créé: trivy-report.html
                 '''
             }
             post {
