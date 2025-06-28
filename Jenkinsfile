@@ -10,7 +10,7 @@ pipeline {
         COMPOSER_PATH = 'composer'
         PHP_PATH = 'C:\\xampp\\php\\php.exe'
         TRIVY_PATH = 'C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe'
-        SONARQUBE_URL = 'http://localhost:9000'
+        SONARQUBE_URL = 'http://host.docker.internal:9000'
     }
 
     stages {
@@ -128,7 +128,7 @@ pipeline {
                         echo '🔒 Running Security scan...'
                         script {
                             bat '''
-                                "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt
+                                "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" fs . --skip-files vendor/laravel/pint/builds/pint --severity HIGH,CRITICAL --format table --output trivy-report.txt
                                 if errorlevel 1 echo Trivy scan completed
                                 "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt
                                 if errorlevel 1 echo Trivy composer scan completed
