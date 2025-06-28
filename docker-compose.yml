@@ -11,6 +11,8 @@ services:
     working_dir: /var/www
     volumes:
       - ./:/var/www
+      - ./storage:/var/www/storage
+      - ./bootstrap/cache:/var/www/bootstrap/cache
     ports:
       - "8000:8000"
     depends_on:
@@ -22,7 +24,9 @@ services:
       - DB_DATABASE=laravel_multitenant
       - DB_USERNAME=root
       - DB_PASSWORD=rootpassword
-    command: php artisan serve --host=0.0.0.0 --port=8000
+      - APP_ENV=local
+      - APP_DEBUG=true
+    command: php -S 0.0.0.0:8000 -t public server.php
 
   db:
     image: mysql:8.0
