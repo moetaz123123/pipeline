@@ -12,7 +12,7 @@ pipeline {
         PHP_PATH = 'C:\\xampp\\php\\php.exe'
         TRIVY_PATH = 'C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe'
         SONARQUBE_SERVER = 'SonarQube' // Nom configuré dans Jenkins
-       
+        SONAR_SCANNER_PATH = 'C:\\Users\\User\\Downloads\\sonar-scanner-4.8.0.2856-windows\\bin\\sonar-scanner.bat'
     }
 
     stages {
@@ -103,26 +103,59 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonarqube') {
-                    bat '''
-                        echo === Analyse SonarQube ===
-                        
-                        echo Exécution des tests pour SonarQube...
-                        "%PHP_PATH%" vendor\\bin\\phpunit --coverage-clover=coverage.xml
-                        
-                        echo Lancement de l'analyse SonarQube...
-                        "C:\\Users\\User\\Downloads\\sonar-scanner-cli-7.1.0.4889-windows-x64\\sonar-scanner-7.1.0.4889-windows-x64\\bin\\sonar-scanner.bat" ^
-                            -Dsonar.projectKey=SonarQube ^
-                            -Dsonar.sources=app ^
-                            -Dsonar.tests=tests ^
-                            -Dsonar.host.url=http://localhost:9000
-                        
-                        if errorlevel 1 (
-                            echo ERREUR: Échec de l'analyse SonarQube
-                            exit /b 1
-                        )
-                        echo === Analyse SonarQube terminée ===
-                    '''
+                script {
+                    echo "=== Début de l'analyse SonarQube ==="
+                    
+                    // Vérifier si le fichier de configuration existe
+                    if (fileExists('sonar-project.properties')) {
+                        echo "Fichier sonar-project.properties trouvé, utilisation de la configuration par défaut"
+                        withSonarQubeEnv('SonarQube') {
+                            bat '''
+                                echo Vérification de la connexion SonarQube...
+                                echo Génération du rapport de couverture...
+                                "%PHP_PATH%" vendor\\bin\\phpunit --coverage-clover=coverage.xml
+                                
+                                echo Lancement de sonar-scanner...
+                                "%SONAR_SCANNER_PATH%"
+                                
+                                if errorlevel 1 (
+                                    echo ERREUR: Échec de l'analyse SonarQube
+                                    echo Vérifiez que SonarQube est démarré sur http://localhost:9000
+                                    exit /b 1
+                                )
+                                echo === Analyse SonarQube terminée avec succès ===
+                            '''
+                        }
+                    } else {
+                        echo "Fichier sonar-project.properties manquant, utilisation de la configuration inline"
+                        withSonarQubeEnv('SonarQube') {
+                            bat '''
+                                echo Génération du rapport de couverture...
+                                "%PHP_PATH%" vendor\\bin\\phpunit --coverage-clover=coverage.xml
+                                
+                                echo Lancement de sonar-scanner avec configuration inline...
+                                "%SONAR_SCANNER_PATH%" ^
+                                    -Dsonar.projectKey=SonarQube ^
+                                    -Dsonar.projectName=Laravel Multi-Tenant ^
+                                    -Dsonar.sources=app,config,database,resources,routes ^
+                                    -Dsonar.tests=tests ^
+                                    -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,node_modules/** ^
+                                    -Dsonar.php.coverage.reportPaths=coverage.xml
+                                
+                                if errorlevel 1 (
+                                    echo ERREUR: Échec de l'analyse SonarQube
+                                    echo Vérifiez que SonarQube est démarré sur http://localhost:9000
+                                    exit /b 1
+                                )
+                                echo === Analyse SonarQube terminée avec succès ===
+                            '''
+                        }
+                    }
+                }
+            }
+            post {
+                always {
+                    echo "Étape SonarQube Analysis terminée"
                 }
             }
         }
