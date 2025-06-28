@@ -101,6 +101,14 @@ pipeline {
                         always {
                             junit allowEmptyResults: true, testResults: 'junit-unit.xml'
                             echo '✅ Unit tests completed'
+                            publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: '.',
+                                reportFiles: 'unit-report.html',
+                                reportName: 'Unit Test Report'
+                            ])
                         }
                     }
                 }
@@ -125,6 +133,14 @@ pipeline {
                         always {
                             junit allowEmptyResults: true, testResults: 'junit-feature.xml'
                             echo '✅ Feature tests completed'
+                            publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: '.',
+                                reportFiles: 'feature-report.html',
+                                reportName: 'Feature Test Report'
+                            ])
                         }
                     }
                 }
@@ -189,6 +205,14 @@ Please check:
                             }
                             archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
                             echo '✅ Security scan completed'
+                            publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: '.',
+                                reportFiles: 'trivy-report.html',
+                                reportName: 'Trivy Security Report'
+                            ])
                         }
                     }
                 }
@@ -226,6 +250,14 @@ Please check:
                         always {
                             archiveArtifacts artifacts: 'infection-report/**/*', allowEmptyArchive: true
                             echo '✅ Mutation tests completed'
+                            publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: 'infection-report',
+                                reportFiles: 'index.html',
+                                reportName: 'Mutation Test Report'
+                            ])
                         }
                     }
                 }
@@ -256,8 +288,8 @@ Please check:
                                     bat '''
                                         "%TRIVY_PATH%" image %DOCKER_IMAGE%:%DOCKER_TAG% ^
                                             --severity HIGH,CRITICAL ^
-                                            --format table ^
-                                            --output trivy-image-report.txt
+                                            --format html ^
+                                            --output trivy-report.html
                                         if errorlevel 1 (
                                             echo Docker image scan completed with vulnerabilities found
                                             exit /b 0
@@ -267,8 +299,16 @@ Please check:
                             }
                             post {
                                 always {
-                                    archiveArtifacts artifacts: 'trivy-image-report.txt', allowEmptyArchive: true
+                                    archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
                                     echo '✅ Docker image scan completed'
+                                    publishHTML([
+                                        allowMissing: true,
+                                        alwaysLinkToLastBuild: true,
+                                        keepAll: true,
+                                        reportDir: '.',
+                                        reportFiles: 'trivy-report.html',
+                                        reportName: 'Trivy Security Report'
+                                    ])
                                 }
                             }
                         }
@@ -312,6 +352,14 @@ Please check:
                         always {
                             junit allowEmptyResults: true, testResults: 'junit-integration.xml'
                             echo '✅ Integration tests completed'
+                            publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: '.',
+                                reportFiles: 'integration-report.html',
+                                reportName: 'Integration Test Report'
+                            ])
                         }
                         cleanup {
                             script {
@@ -398,6 +446,51 @@ Please check:
                     echo "Cleanup failed: ${e.getMessage()}"
                 }
             }
+            // Unit Test HTML
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: '.',
+                reportFiles: 'unit-report.html',
+                reportName: 'Unit Test Report'
+            ])
+            // Feature Test HTML
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: '.',
+                reportFiles: 'feature-report.html',
+                reportName: 'Feature Test Report'
+            ])
+            // Integration Test HTML
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: '.',
+                reportFiles: 'integration-report.html',
+                reportName: 'Integration Test Report'
+            ])
+            // Trivy HTML
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: '.',
+                reportFiles: 'trivy-report.html',
+                reportName: 'Trivy Security Report'
+            ])
+            // Infection HTML
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'infection-report',
+                reportFiles: 'index.html',
+                reportName: 'Mutation Test Report'
+            ])
         }
 
         success {
