@@ -61,11 +61,11 @@ pipeline {
                         "%PHP_PATH%" artisan key:generate --force
                         if errorlevel 1 (
                             echo Erreur lors de la génération de la clé, génération manuelle
-                            powershell -Command "$key = [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 })); Add-Content -Path '.env' -Value \"APP_KEY=base64:$key\""
+                            powershell -Command "$key = [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 })); Add-Content -Path '.env' -Value \\"APP_KEY=base64:$key\\""
                         )
                         findstr "APP_KEY=base64:" .env >nul
                         if errorlevel 1 (
-                            powershell -Command "$key = [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 })); Add-Content -Path '.env' -Value \"APP_KEY=base64:$key\""
+                            powershell -Command "$key = [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 })); Add-Content -Path '.env' -Value \\"APP_KEY=base64:$key\\""
                         )
                         echo Configuration Laravel pour les tests:
                         findstr "APP_ENV APP_DEBUG DB_CONNECTION APP_KEY" .env
@@ -112,7 +112,7 @@ pipeline {
                         }
                     }
                 }
-
+                
                 stage('Feature Tests') {
                     steps {
                         echo '🧪 Running Feature tests...'
@@ -144,13 +144,13 @@ pipeline {
                         }
                     }
                 }
-
+                
                 stage('Security Scan') {
                     steps {
-                        echo '🔒 Running Trivy scan (identique au terminal)...'
+                        echo '🔒 Running Trivy scan...'
                         script {
                             bat '''
-                                echo Début du scan Trivy (même commande que terminal)...
+                                echo Début du scan Trivy...
                                 docker run --rm -v "%cd%:/app" aquasec/trivy:latest fs /app --skip-files vendor/laravel/pint/builds/pint --format table --output trivy-report.txt --timeout 600s
                                 if errorlevel 1 (
                                     echo Docker Trivy scan failed with error code %errorlevel%
@@ -216,16 +216,26 @@ Please check:
                         }
                     }
                 }
-
+                
                 stage('SonarQube Analysis') {
                     steps {
-                        withSonarQubeEnv('sonarqube') {
-                            bat 'vendor\\bin\\phpunit --coverage-clover=coverage.xml'
-                            bat '"C:\\Users\\User\\Downloads\\sonar-scanner-cli-7.1.0.4889-windows-x64\\sonar-scanner-7.1.0.4889-windows-x64\\bin\\sonar-scanner.bat" -Dsonar.projectKey=touza-project -Dsonar.php.coverage.reportPaths=coverage.xml -Dsonar.sources=app -Dsonar.tests=tests -Dsonar.host.url=http://localhost:9000'
+                        echo '📊 Running SonarQube analysis...'
+                        script {
+                            withSonarQubeEnv('sonarqube') {
+                                bat '''
+                                    "%PHP_PATH%" vendor/bin/phpunit --coverage-clover=coverage.xml
+                                    "C:\\Users\\User\\Downloads\\sonarqube-25.6.0.109173\\sonarqube-25.6.0.109173\\bin\\sonar-scanner.bat" -Dsonar.projectKey=touza-project -Dsonar.php.coverage.reportPaths=coverage.xml -Dsonar.sources=app -Dsonar.tests=tests -Dsonar.host.url=http://localhost:9000
+                                '''
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            echo '✅ SonarQube analysis completed'
                         }
                     }
                 }
-
+                
                 stage('Build Docker Image') {
                     steps {
                         echo '🐳 Building Docker image...'
@@ -242,16 +252,13 @@ Please check:
                         }
                     }
                 }
-
-                stage('Scan Docker Image A') {
+                
+                stage('Scan Docker Image') {
                     steps {
                         echo '🔍 Scanning Docker image...'
                         script {
                             bat '''
-                                "%TRIVY_PATH%" image %DOCKER_IMAGE%:%DOCKER_TAG% ^
-                                    --severity HIGH,CRITICAL ^
-                                    --format html ^
-                                    --output trivy-report.html
+                                "%TRIVY_PATH%" image %DOCKER_IMAGE%:%DOCKER_TAG% --severity HIGH,CRITICAL --format html --output trivy-image-report.html
                                 if errorlevel 1 (
                                     echo Docker image scan completed with vulnerabilities found
                                     exit /b 0
@@ -261,52 +268,20 @@ Please check:
                     }
                     post {
                         always {
-                            archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
+                            archiveArtifacts artifacts: 'trivy-image-report.html', allowEmptyArchive: true
                             echo '✅ Docker image scan completed'
                             publishHTML([
                                 allowMissing: true,
                                 alwaysLinkToLastBuild: true,
                                 keepAll: true,
                                 reportDir: '.',
-                                reportFiles: 'trivy-report.html',
-                                reportName: 'Trivy Security Report'
+                                reportFiles: 'trivy-image-report.html',
+                                reportName: 'Trivy Docker Image Report'
                             ])
                         }
                     }
                 }
-
-                stage('Scan Docker Image B') {
-                    steps {
-                        echo '🔍 Scanning Docker image...'
-                        script {
-                            bat '''
-                                "%TRIVY_PATH%" image %DOCKER_IMAGE%:%DOCKER_TAG% ^
-                                    --severity HIGH,CRITICAL ^
-                                    --format html ^
-                                    --output trivy-report.html
-                                if errorlevel 1 (
-                                    echo Docker image scan completed with vulnerabilities found
-                                    exit /b 0
-                                )
-                            '''
-                        }
-                    }
-                    post {
-                        always {
-                            archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
-                            echo '✅ Docker image scan completed'
-                            publishHTML([
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: '.',
-                                reportFiles: 'trivy-report.html',
-                                reportName: 'Trivy Security Report'
-                            ])
-                        }
-                    }
-                }
-
+                
                 stage('Mutation Tests') {
                     steps {
                         echo '🧬 Running Mutation tests...'
@@ -342,13 +317,6 @@ Please check:
             steps {
                 echo '⏸️ Waiting for code quality review approval...'
                 input message: 'Code quality and security checks completed. Do you want to continue?', ok: 'Continue to Build'
-            }
-        }
-
-        stage('Checkpoint - Build Review') {
-            steps {
-                echo '⏸️ Waiting for build review approval...'
-                input message: 'Docker image built and scanned. Do you want to continue to integration tests?', ok: 'Continue to Integration Tests'
             }
         }
 
@@ -474,7 +442,8 @@ Please check:
                     echo "Cleanup failed: ${e.getMessage()}"
                 }
             }
-            // Unit Test HTML
+            
+            // Publish all HTML reports
             publishHTML([
                 allowMissing: true,
                 alwaysLinkToLastBuild: true,
@@ -483,7 +452,7 @@ Please check:
                 reportFiles: 'unit-report.html',
                 reportName: 'Unit Test Report'
             ])
-            // Feature Test HTML
+            
             publishHTML([
                 allowMissing: true,
                 alwaysLinkToLastBuild: true,
@@ -492,7 +461,7 @@ Please check:
                 reportFiles: 'feature-report.html',
                 reportName: 'Feature Test Report'
             ])
-            // Integration Test HTML
+            
             publishHTML([
                 allowMissing: true,
                 alwaysLinkToLastBuild: true,
@@ -501,7 +470,7 @@ Please check:
                 reportFiles: 'integration-report.html',
                 reportName: 'Integration Test Report'
             ])
-            // Trivy HTML
+            
             publishHTML([
                 allowMissing: true,
                 alwaysLinkToLastBuild: true,
@@ -510,7 +479,7 @@ Please check:
                 reportFiles: 'trivy-report.html',
                 reportName: 'Trivy Security Report'
             ])
-            // Infection HTML
+            
             publishHTML([
                 allowMissing: true,
                 alwaysLinkToLastBuild: true,
@@ -596,4 +565,3 @@ Please check:
             }
         }
     }
-}
