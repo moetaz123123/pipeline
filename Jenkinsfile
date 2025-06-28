@@ -114,12 +114,31 @@ pipeline {
                     )
                 '''
             }
+            post {
+                always {
+                    echo "Stage Install Dependencies terminé"
+                }
+                success {
+                    echo "✅ Dépendances installées avec succès"
+                }
+                failure {
+                    echo "❌ Échec de l'installation des dépendances"
+                }
+            }
         }
         
         stage('Setup Laravel') {
             steps {
                 bat '''
                     echo === Configuration de Laravel ===
+                    
+                    echo Vérification préalable du dossier vendor...
+                    if not exist vendor\\autoload.php (
+                        echo ERREUR: Le dossier vendor n'existe pas. Les dépendances doivent être installées d'abord.
+                        echo Contenu du répertoire:
+                        dir
+                        exit /b 1
+                    )
                     
                     if exist .env.example (
                         copy .env.example .env
@@ -138,12 +157,6 @@ pipeline {
                     echo SESSION_DRIVER=array>> .env
                     echo QUEUE_DRIVER=sync>> .env
                     echo MAIL_MAILER=array>> .env
-                    
-                    echo Vérification du dossier vendor...
-                    if not exist vendor\\autoload.php (
-                        echo ERREUR: Le dossier vendor n'existe pas. Les dépendances doivent être installées d'abord.
-                        exit /b 1
-                    )
                     
                     echo Génération de la clé d'application...
                     "%PHP_PATH%" artisan key:generate --force
