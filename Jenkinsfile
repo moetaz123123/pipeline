@@ -358,13 +358,103 @@ ${trivyImageText}
 
         stage('Deploy') {
             steps {
-                bat '''
-                    echo === Déploiement ===
-                    "%PHP_PATH%" artisan migrate --force
-                    "%PHP_PATH%" artisan db:seed --force
-                    docker run -d --rm -p 8000:8000 %DOCKER_IMAGE%
-                    echo === Application déployée sur http://localhost:8000 ===
-                '''
+                // Arrêter et nettoyer les anciens conteneurs
+                bat 'docker-compose down'
+                bat 'docker container prune -f'
+
+                // Démarrer les services
+                bat 'docker-compose up -d'
+
+                // Attendre que les services soient prêts
+                bat 'powershell -Command "Start-Sleep -Seconds 30"'
+                bat 'docker-compose ps'
+                bat 'docker-compose logs app'
+
+                // Attendre que le conteneur app soit prêt
+                script {
+                    def maxWaitTime = 60
+                    def waitTime = 0
+                    def containerReady = false
+
+                    while (waitTime < maxWaitTime && !containerReady) {
+                        try {
+                            echo "=== Container logs ==="
+                            bat 'docker-compose logs app'
+                            echo "====================="
+                            def status = bat(script: 'docker-compose ps app', returnStdout: true).trim()
+                            echo "Container status: ${status}"
+                            if (status.contains('Up')) {
+                                try {
+                                    bat 'docker-compose exec -T app echo "Container is responding"'
+                                    containerReady = true
+                                    echo "✅ Container is ready after ${waitTime} seconds"
+                                } catch (Exception e) {
+                                    echo "⏳ Container is Up but not responding yet, waiting..."
+                                    bat 'powershell -Command "Start-Sleep -Seconds 5"'
+                                    waitTime += 5
+                                }
+                            } else {
+                                echo "⏳ Container not ready yet, waiting..."
+                                bat 'powershell -Command "Start-Sleep -Seconds 5"'
+                                waitTime += 5
+                            }
+                        } catch (Exception e) {
+                            echo "⏳ Container not responding yet, waiting..."
+                            bat 'powershell -Command "Start-Sleep -Seconds 5"'
+                            waitTime += 5
+                        }
+                    }
+                    if (!containerReady) {
+                        echo "❌ Container failed to become ready after ${maxWaitTime} seconds"
+                        echo "=== Final container status ==="
+                        bat 'docker-compose ps'
+                        echo "=== Final container logs ==="
+                        bat 'docker-compose logs app'
+                        echo "============================"
+                        error "❌ Container failed to become ready after ${maxWaitTime} seconds"
+                    }
+                }
+
+                // Migrations avec retry
+                script {
+                    def maxRetries = 3
+                    def retryCount = 0
+                    def migrationSuccess = false
+                    while (retryCount < maxRetries && !migrationSuccess) {
+                        try {
+                            bat 'docker-compose exec -T app php artisan migrate --force'
+                            migrationSuccess = true
+                            echo "✅ Migration completed successfully on attempt ${retryCount + 1}"
+                        } catch (Exception e) {
+                            retryCount++
+                            echo "❌ Migration attempt ${retryCount} failed: ${e.getMessage()}"
+                            if (retryCount < maxRetries) {
+                                echo "⏳ Waiting 15 seconds before retry..."
+                                bat 'powershell -Command "Start-Sleep -Seconds 15"'
+                                bat 'docker-compose ps'
+                            }
+                        }
+                    }
+                    if (!migrationSuccess) {
+                        error "❌ Migration failed after ${maxRetries} attempts"
+                    }
+                }
+
+                // Seeders
+                script {
+                    try {
+                        echo "🌱 Running database seeders..."
+                        bat 'docker-compose exec -T app php artisan db:seed --force'
+                        echo "✅ Database seeding completed successfully"
+                    } catch (Exception e) {
+                        echo "❌ Database seeding failed: ${e.getMessage()}"
+                        echo "⚠️ Continuing deployment despite seeding failure"
+                    }
+                }
+
+                // Statut final et logs
+                bat 'docker-compose ps'
+                bat 'docker-compose logs --tail=20'
             }
         }
     }
