@@ -171,7 +171,7 @@ pipeline {
                     }
                     post {
                         always {
-                            junit allowEmptyResults: true, testResultsPattern: 'junit-unit.xml'
+                            junit allowEmptyResults: true, testResults: 'junit-unit.xml'
                             publishHTML([
                                 allowMissing: true,
                                 alwaysLinkToLastBuild: true,
@@ -202,7 +202,7 @@ pipeline {
                     }
                     post {
                         always {
-                            junit allowEmptyResults: true, testResultsPattern: 'junit-feature.xml'
+                            junit allowEmptyResults: true, testResults: 'junit-feature.xml'
                         }
                     }
                 }
@@ -432,7 +432,7 @@ pipeline {
                             docker compose -f docker-compose.test.yml down --remove-orphans 2>nul || echo Nettoyage terminé
                         '''
                     }
-                    junit allowEmptyResults: true, testResultsPattern: 'junit-integration.xml'
+                    junit allowEmptyResults: true, testResults: 'junit-integration.xml'
                 }
             }
         }
