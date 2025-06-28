@@ -52,11 +52,16 @@ pipeline {
         stage('Setup Laravel') {
             steps {
                 bat '''
+                    echo Configuration de Laravel...
                     if exist .env.example (
                         copy .env.example .env
+                        echo Fichier .env créé à partir de .env.example
                     ) else (
                         echo APP_NAME=Laravel> .env
+                        echo Fichier .env créé avec configuration de base
                     )
+                    
+                    echo Configuration pour les tests...
                     echo APP_ENV=testing>> .env
                     echo APP_DEBUG=true>> .env
                     echo DB_CONNECTION=sqlite>> .env
@@ -64,11 +69,22 @@ pipeline {
                     echo CACHE_DRIVER=array>> .env
                     echo SESSION_DRIVER=array>> .env
                     echo QUEUE_DRIVER=sync>> .env
+                    echo MAIL_MAILER=array>> .env
+                    
+                    echo Vérification du dossier vendor...
+                    if not exist vendor\\autoload.php (
+                        echo Erreur: Le dossier vendor n'existe pas. Les dépendances doivent être installées d'abord.
+                        exit /b 1
+                    )
+                    
+                    echo Génération de la clé d'application...
                     "%PHP_PATH%" artisan key:generate --force
                     if errorlevel 1 (
                         echo Erreur lors de la génération de la clé
                         exit /b 1
                     )
+                    
+                    echo Configuration Laravel terminée avec succès
                 '''
             }
         }
