@@ -357,15 +357,12 @@ ${trivyImageText}
         }
 
         stage('Deploy') {
-            when {
-                branch 'main'
-            }
             steps {
                 bat '''
                     echo === Déploiement ===
                     "%PHP_PATH%" artisan migrate --force
                     "%PHP_PATH%" artisan db:seed --force
-                    docker run -d --rm -p 8000:80 %DOCKER_IMAGE%
+                    docker run -d --rm -p 8000:8000 %DOCKER_IMAGE%
                     echo === Application déployée sur http://localhost:8000 ===
                 '''
             }
