@@ -55,33 +55,10 @@ pipeline {
 
         stage('Trivy Scan') {
             steps {
-                bat '''
-                    echo === Scan de sécurité Trivy ===
-                    docker build -t %DOCKER_IMAGE% .
-                    if errorlevel 1 (
-                        echo ERREUR: Échec de la construction Docker
-                        exit /b 1
-                    )
-                    
-                    echo Scan de l'image Docker avec Trivy...
-                    echo Tentative 1: Scan de l'image Docker...
-                    docker run --rm aquasec/trivy image %DOCKER_IMAGE% --format html --output trivy-report.html
-                    if errorlevel 1 (
-                        echo Tentative 2: Scan du système de fichiers...
-                        docker run --rm -v "%cd%:/app" aquasec/trivy fs /app --skip-files vendor/ --format html --output trivy-report.html
-                        if errorlevel 1 (
-                            echo Tentative 3: Scan avec Docker socket Windows...
-                            docker run --rm -v //var/run/docker.sock:/var/run/docker.sock aquasec/trivy image %DOCKER_IMAGE% --format html --output trivy-report.html
-                            if errorlevel 1 (
-                                echo AVERTISSEMENT: Toutes les tentatives Trivy ont échoué
-                                echo Création d'un rapport vide...
-                                echo ^<html^>^<body^>^<h1^>Trivy Scan Report^</h1^>^<p^>Scan non disponible^</p^>^</body^>^</html^> > trivy-report.html
-                            )
-                        )
-                    )
-                    echo === Scan Trivy terminé ===
-                '''
+                bat 'docker build -t %DOCKER_IMAGE% .'
+                bat 'docker run --rm -v //var/run/docker.sock:/var/run/docker.sock aquasec/trivy image %DOCKER_IMAGE%'
             }
+        }
             post {
                 always {
                     publishHTML(target: [
