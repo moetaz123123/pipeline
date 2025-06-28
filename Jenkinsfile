@@ -56,9 +56,8 @@ pipeline {
         stage('Trivy Scan') {
             steps {
                 bat 'docker build -t %DOCKER_IMAGE% .'
-                bat 'docker run --rm -v //var/run/docker.sock:/var/run/docker.sock aquasec/trivy image %DOCKER_IMAGE%'
+                bat 'docker run --rm -v //var/run/docker.sock:/var/run/docker.sock aquasec/trivy image %DOCKER_IMAGE% --format html --output trivy-report.html'
             }
-        }
             post {
                 always {
                     publishHTML(target: [
