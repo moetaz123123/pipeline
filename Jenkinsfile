@@ -514,6 +514,7 @@ Please check:
                 }
             }
         }
+        }
 
         failure {
             echo '❌ Pipeline failed!'
@@ -565,3 +566,4 @@ Please check:
             }
         }
     }
+}
