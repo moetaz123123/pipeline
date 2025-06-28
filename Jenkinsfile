@@ -127,81 +127,26 @@ pipeline {
 
                 stage('Security Scan') {
                     steps {
-                        echo '🔒 Running Trivy scan (HTML + TXT report)...'
+                        echo '🔒 Running Trivy scan (HTML report)...'
                         script {
                             bat '''
-                                docker run --rm -v "%cd%:/app" aquasec/trivy:latest fs /app --skip-files vendor/laravel/pint/builds/pint --format table --output trivy-report.txt --timeout 600s
                                 docker run --rm -v "%cd%:/app" aquasec/trivy:latest fs /app --skip-files vendor/laravel/pint/builds/pint --format html --output trivy-report.html --timeout 600s
                             '''
                         }
                     }
                     post {
                         always {
-                            archiveArtifacts artifacts: 'trivy-report.*', allowEmptyArchive: true
-                            publishHTML([
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: '.',
-                                reportFiles: 'trivy-report.html',
-                                reportName: 'Trivy Security Report'
-                            ])
+                            archiveArtifacts artifacts: 'trivy-report.html', allowEmptyArchive: true
                             echo '✅ Security scan completed'
                         }
                     }
                 }
 
-                stage('SonarQube Analysis') {
-                    steps {
-                        echo '📊 Running SonarQube analysis...'
-                        script {
-                            bat '''
-                                if not exist .sonar-scanner (
-                                    echo "SonarQube scanner not found, downloading..."
-                                )
-                            '''
-                            bat '''
-                                docker run --rm -e SONAR_HOST_URL=%SONARQUBE_URL% -e SONAR_LOGIN=%SONAR_TOKEN% -v "%WORKSPACE%:/usr/src" sonarsource/sonar-scanner-cli ^
-                                    -Dsonar.projectKey=laravel-multitenant ^
-                                    -Dsonar.sources=app,config,database,resources,routes ^
-                                    -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,tests/**
-                            '''
-                        }
-                    }
-                    post {
-                        always {
-                            echo "✅ SonarQube analysis completed"
-                        }
-                    }
-                }
-
-                stage('SonarQube HTML Report') {
-                    steps {
-                        echo '📄 Generating SonarQube HTML report...'
-                        script {
-                            bat '''
-                                docker run --rm -v "%cd%:/app" cnescatlab/sonar-cnes-report:latest \
-                                  -s http://host.docker.internal:9000 \
-                                  -t %SONAR_TOKEN% \
-                                  -p laravel-multitenant \
-                                  -o sonar-report.html
-                            '''
-                        }
-                    }
-                    post {
-                        always {
-                            archiveArtifacts artifacts: 'sonar-report.html', allowEmptyArchive: true
-                            publishHTML([
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: '.',
-                                reportFiles: 'sonar-report.html',
-                                reportName: 'SonarQube HTML Report'
-                            ])
-                            echo '✅ SonarQube HTML report published'
-                        }
-                    }
+               stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('ayoub') {
+                    bat 'vendor\\bin\\phpunit --coverage-clover=coverage.xml'
+                    bat '"C:\\Users\\MSI\\Downloads\\sonar-scanner-cli-7.1.0.4889-windows-x64\\sonar-scanner-7.1.0.4889-windows-x64\\bin\\sonar-scanner.bat" -Dsonar.projectKey=laravel-app -Dsonar.php.coverage.reportPaths=coverage.xml -Dsonar.sources=app -Dsonar.tests=tests -Dsonar.host.url=http://localhost:9000 -Dsonar.login=%SONAR_AUTH_TOKEN%'
                 }
             }
         }
