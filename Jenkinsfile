@@ -70,43 +70,37 @@ pipeline {
                     )
                     
                     echo Création du rapport HTML Trivy...
-                    REM Header
-                    (
-                      echo ^<html^>
-                      echo ^<head^>
-                      echo ^<title^>Trivy Security Scan Report^</title^>
-                      echo ^<style^>
-                      echo body { font-family: monospace; margin: 20px; background-color: #f5f5f5; }
-                      echo pre { background-color: white; padding: 15px; border: 1px solid #ddd; border-radius: 5px; overflow-x: auto; }
-                      echo h1 { color: #333; border-bottom: 2px solid #007acc; }
-                      echo h2 { color: #007acc; }
-                      echo table { border-collapse: collapse; width: 100%%; margin: 10px 0; }
-                      echo th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                      echo th { background-color: #007acc; color: white; }
-                      echo .success { color: green; }
-                      echo .warning { color: orange; }
-                      echo .error { color: red; }
-                      echo ^</style^>
-                      echo ^</head^>
-                      echo ^<body^>
-                      echo ^<h1^>Trivy Security Scan Report^</h1^>
-                      echo ^<h2^>Scan Details^</h2^>
-                      echo ^<p^>Scan completed for directory: %WORKSPACE%^</p^>
-                      echo ^<p^>Command: trivy fs . --skip-files vendor/laravel/pint/builds/pint --format table --timeout 120s^</p^>
-                      echo ^<h2^>Scan Results^</h2^>
-                      echo ^<pre^>
-                    ) > trivy-report.html
                     
-                    REM Contenu du rapport
+                    echo ^<html^> > trivy-report.html
+                    echo ^<head^> >> trivy-report.html
+                    echo ^<title^>Trivy Security Scan Report^</title^> >> trivy-report.html
+                    echo ^<style^> >> trivy-report.html
+                    echo body { font-family: monospace; margin: 20px; background-color: #f5f5f5; } >> trivy-report.html
+                    echo pre { background-color: white; padding: 15px; border: 1px solid #ddd; border-radius: 5px; overflow-x: auto; } >> trivy-report.html
+                    echo h1 { color: #333; border-bottom: 2px solid #007acc; } >> trivy-report.html
+                    echo h2 { color: #007acc; } >> trivy-report.html
+                    echo table { border-collapse: collapse; width: 100%%; margin: 10px 0; } >> trivy-report.html
+                    echo th, td { border: 1px solid #ddd; padding: 8px; text-align: left; } >> trivy-report.html
+                    echo th { background-color: #007acc; color: white; } >> trivy-report.html
+                    echo .success { color: green; } >> trivy-report.html
+                    echo .warning { color: orange; } >> trivy-report.html
+                    echo .error { color: red; } >> trivy-report.html
+                    echo ^</style^> >> trivy-report.html
+                    echo ^</head^> >> trivy-report.html
+                    echo ^<body^> >> trivy-report.html
+                    echo ^<h1^>Trivy Security Scan Report^</h1^> >> trivy-report.html
+                    echo ^<h2^>Scan Details^</h2^> >> trivy-report.html
+                    echo ^<p^>Scan completed for directory: %WORKSPACE%^</p^> >> trivy-report.html
+                    echo ^<p^>Command: trivy fs . --skip-files vendor/laravel/pint/builds/pint --format table --timeout 120s^</p^> >> trivy-report.html
+                    echo ^<h2^>Scan Results^</h2^> >> trivy-report.html
+                    echo ^<pre^> >> trivy-report.html
+                    
                     type trivy-report.txt >> trivy-report.html
                     
-                    REM Footer
-                    (
-                      echo ^</pre^>
-                      echo ^<p class="success"^>^<strong^>✓^</strong^> Scan completed successfully. Check the detailed text report (trivy-report.txt) for complete vulnerability information.^</p^>
-                      echo ^</body^>
-                      echo ^</html^>
-                    ) >> trivy-report.html
+                    echo ^</pre^> >> trivy-report.html
+                    echo ^<p class="success"^>^<strong^>✓^</strong^> Scan completed successfully. Check the detailed text report (trivy-report.txt) for complete vulnerability information.^</p^> >> trivy-report.html
+                    echo ^</body^> >> trivy-report.html
+                    echo ^</html^> >> trivy-report.html
                     
                     echo Rapport HTML Trivy créé: trivy-report.html
                 '''
