@@ -226,6 +226,87 @@ Please check:
                     }
                 }
 
+                stage('Build Docker Image') {
+                    steps {
+                        echo '🐳 Building Docker image...'
+                        script {
+                            bat '''
+                                docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% .
+                                docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_IMAGE%:latest
+                            '''
+                        }
+                    }
+                    post {
+                        always {
+                            echo '✅ Docker image built'
+                        }
+                    }
+                }
+
+                stage('Scan Docker Image A') {
+                    steps {
+                        echo '🔍 Scanning Docker image...'
+                        script {
+                            bat '''
+                                "%TRIVY_PATH%" image %DOCKER_IMAGE%:%DOCKER_TAG% ^
+                                    --severity HIGH,CRITICAL ^
+                                    --format html ^
+                                    --output trivy-report.html
+                                if errorlevel 1 (
+                                    echo Docker image scan completed with vulnerabilities found
+                                    exit /b 0
+                                )
+                            '''
+                        }
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
+                            echo '✅ Docker image scan completed'
+                            publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: '.',
+                                reportFiles: 'trivy-report.html',
+                                reportName: 'Trivy Security Report'
+                            ])
+                        }
+                    }
+                }
+
+                stage('Scan Docker Image B') {
+                    steps {
+                        echo '🔍 Scanning Docker image...'
+                        script {
+                            bat '''
+                                "%TRIVY_PATH%" image %DOCKER_IMAGE%:%DOCKER_TAG% ^
+                                    --severity HIGH,CRITICAL ^
+                                    --format html ^
+                                    --output trivy-report.html
+                                if errorlevel 1 (
+                                    echo Docker image scan completed with vulnerabilities found
+                                    exit /b 0
+                                )
+                            '''
+                        }
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
+                            echo '✅ Docker image scan completed'
+                            publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: '.',
+                                reportFiles: 'trivy-report.html',
+                                reportName: 'Trivy Security Report'
+                            ])
+                        }
+                    }
+                }
+
                 stage('Checkpoint - Code Quality Review') {
                     steps {
                         echo '⏸️ Waiting for code quality review approval...'
@@ -261,201 +342,116 @@ Please check:
                         }
                     }
                 }
+            }
+        }
 
-                stage('Build & Security') {
-                    parallel {
-                        stage('Build Docker Image') {
-                            steps {
-                                echo '🐳 Building Docker image...'
-                                script {
-                                    bat '''
-                                        docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% .
-                                        docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_IMAGE%:latest
-                                    '''
-                                }
-                            }
-                            post {
-                                always {
-                                    echo '✅ Docker image built'
-                                }
+        stage('Checkpoint - Build Review') {
+            steps {
+                echo '⏸️ Waiting for build review approval...'
+                input message: 'Docker image built and scanned. Do you want to continue to integration tests?', ok: 'Continue to Integration Tests'
+            }
+        }
+
+        stage('Integration Tests') {
+            steps {
+                echo '🔗 Running Integration tests...'
+                script {
+                    bat '''
+                        docker compose up -d db
+                        timeout /t 30 /nobreak
+                        docker compose exec -T db mysql -uroot -pRoot@1234 -e "CREATE DATABASE IF NOT EXISTS laravel_multitenant_test;"
+                        if errorlevel 1 (
+                            echo Database creation completed with warnings
+                            exit /b 0
+                        )
+                        docker compose exec -T app php artisan migrate --env=testing
+                        if errorlevel 1 (
+                            echo Migration completed with warnings
+                            exit /b 0
+                        )
+                        docker compose exec -T app vendor/bin/phpunit --testsuite=Feature --log-junit junit-integration.xml
+                        if errorlevel 1 (
+                            echo Integration tests completed with warnings
+                            exit /b 0
+                        )
+                        docker compose down
+                    '''
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'junit-integration.xml'
+                    echo '✅ Integration tests completed'
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: '.',
+                        reportFiles: 'integration-report.html',
+                        reportName: 'Integration Test Report'
+                    ])
+                }
+                cleanup {
+                    script {
+                        bat 'docker compose down || echo "Docker compose cleanup completed"'
+                    }
+                }
+            }
+        }
+
+        stage('Checkpoint - Pre-Deploy Review') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo '⏸️ Waiting for pre-deploy approval...'
+                input message: 'All tests passed. Ready to deploy to production?', ok: 'Deploy to Production'
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                branch 'main'
+            }
+            parallel {
+                stage('Push to Registry') {
+                    steps {
+                        echo '📤 Pushing to Docker Hub...'
+                        script {
+                            withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                                bat '''
+                                    echo %DOCKER_PASSWORD% | docker login %DOCKER_REGISTRY% -u %DOCKER_USERNAME% --password-stdin
+                                    docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_USERNAME%/%DOCKER_IMAGE%:%DOCKER_TAG%
+                                    docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_USERNAME%/%DOCKER_IMAGE%:latest
+                                    docker push %DOCKER_USERNAME%/%DOCKER_IMAGE%:%DOCKER_TAG%
+                                    docker push %DOCKER_USERNAME%/%DOCKER_IMAGE%:latest
+                                '''
                             }
                         }
-
-                        stage('Scan Docker Image A') {
-                            steps {
-                                echo '🔍 Scanning Docker image...'
-                                script {
-                                    bat '''
-                                        "%TRIVY_PATH%" image %DOCKER_IMAGE%:%DOCKER_TAG% ^
-                                            --severity HIGH,CRITICAL ^
-                                            --format html ^
-                                            --output trivy-report.html
-                                        if errorlevel 1 (
-                                            echo Docker image scan completed with vulnerabilities found
-                                            exit /b 0
-                                        )
-                                    '''
-                                }
-                            }
-                            post {
-                                always {
-                                    archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
-                                    echo '✅ Docker image scan completed'
-                                    publishHTML([
-                                        allowMissing: true,
-                                        alwaysLinkToLastBuild: true,
-                                        keepAll: true,
-                                        reportDir: '.',
-                                        reportFiles: 'trivy-report.html',
-                                        reportName: 'Trivy Security Report'
-                                    ])
-                                }
-                            }
-                        }
-
-                        stage('Scan Docker Image B') {
-                            steps {
-                                echo '🔍 Scanning Docker image...'
-                                script {
-                                    bat '''
-                                        "%TRIVY_PATH%" image %DOCKER_IMAGE%:%DOCKER_TAG% ^
-                                            --severity HIGH,CRITICAL ^
-                                            --format html ^
-                                            --output trivy-report.html
-                                        if errorlevel 1 (
-                                            echo Docker image scan completed with vulnerabilities found
-                                            exit /b 0
-                                        )
-                                    '''
-                                }
-                            }
-                            post {
-                                always {
-                                    archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
-                                    echo '✅ Docker image scan completed'
-                                    publishHTML([
-                                        allowMissing: true,
-                                        alwaysLinkToLastBuild: true,
-                                        keepAll: true,
-                                        reportDir: '.',
-                                        reportFiles: 'trivy-report.html',
-                                        reportName: 'Trivy Security Report'
-                                    ])
-                                }
-                            }
+                    }
+                    post {
+                        always {
+                            echo '✅ Docker image pushed to registry'
                         }
                     }
                 }
 
-                stage('Checkpoint - Build Review') {
+                stage('Deploy to Staging') {
                     steps {
-                        echo '⏸️ Waiting for build review approval...'
-                        input message: 'Docker image built and scanned. Do you want to continue to integration tests?', ok: 'Continue to Integration Tests'
-                    }
-                }
-
-                stage('Integration Tests') {
-                    steps {
-                        echo '🔗 Running Integration tests...'
+                        echo '🚀 Deploying to staging...'
                         script {
                             bat '''
-                                docker compose up -d db
-                                timeout /t 30 /nobreak
-                                docker compose exec -T db mysql -uroot -pRoot@1234 -e "CREATE DATABASE IF NOT EXISTS laravel_multitenant_test;"
+                                docker compose -f docker-compose.staging.yml up -d
                                 if errorlevel 1 (
-                                    echo Database creation completed with warnings
+                                    echo Staging deployment completed with warnings
                                     exit /b 0
                                 )
-                                docker compose exec -T app php artisan migrate --env=testing
-                                if errorlevel 1 (
-                                    echo Migration completed with warnings
-                                    exit /b 0
-                                )
-                                docker compose exec -T app vendor/bin/phpunit --testsuite=Feature --log-junit junit-integration.xml
-                                if errorlevel 1 (
-                                    echo Integration tests completed with warnings
-                                    exit /b 0
-                                )
-                                docker compose down
                             '''
                         }
                     }
                     post {
                         always {
-                            junit allowEmptyResults: true, testResults: 'junit-integration.xml'
-                            echo '✅ Integration tests completed'
-                            publishHTML([
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: '.',
-                                reportFiles: 'integration-report.html',
-                                reportName: 'Integration Test Report'
-                            ])
-                        }
-                        cleanup {
-                            script {
-                                bat 'docker compose down || echo "Docker compose cleanup completed"'
-                            }
-                        }
-                    }
-                }
-
-                stage('Checkpoint - Pre-Deploy Review') {
-                    when {
-                        branch 'main'
-                    }
-                    steps {
-                        echo '⏸️ Waiting for pre-deploy approval...'
-                        input message: 'All tests passed. Ready to deploy to production?', ok: 'Deploy to Production'
-                    }
-                }
-
-                stage('Deploy') {
-                    when {
-                        branch 'main'
-                    }
-                    parallel {
-                        stage('Push to Registry') {
-                            steps {
-                                echo '📤 Pushing to Docker Hub...'
-                                script {
-                                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
-                                        bat '''
-                                            echo %DOCKER_PASSWORD% | docker login %DOCKER_REGISTRY% -u %DOCKER_USERNAME% --password-stdin
-                                            docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_USERNAME%/%DOCKER_IMAGE%:%DOCKER_TAG%
-                                            docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_USERNAME%/%DOCKER_IMAGE%:latest
-                                            docker push %DOCKER_USERNAME%/%DOCKER_IMAGE%:%DOCKER_TAG%
-                                            docker push %DOCKER_USERNAME%/%DOCKER_IMAGE%:latest
-                                        '''
-                                    }
-                                }
-                            }
-                            post {
-                                always {
-                                    echo '✅ Docker image pushed to registry'
-                                }
-                            }
-                        }
-
-                        stage('Deploy to Staging') {
-                            steps {
-                                echo '🚀 Deploying to staging...'
-                                script {
-                                    bat '''
-                                        docker compose -f docker-compose.staging.yml up -d
-                                        if errorlevel 1 (
-                                            echo Staging deployment completed with warnings
-                                            exit /b 0
-                                        )
-                                    '''
-                                }
-                            }
-                            post {
-                                always {
-                                    echo '✅ Staging deployment completed'
-                                }
-                            }
+                            echo '✅ Staging deployment completed'
                         }
                     }
                 }
