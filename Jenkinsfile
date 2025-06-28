@@ -217,6 +217,10 @@ ${readFile('trivy-report.txt')}
             steps {
                 bat '''
                     echo === Feature tests ===
+                    if not exist .env.example (
+                        echo ERREUR: Le fichier .env.example est manquant à la racine du projet!
+                        exit /b 1
+                    )
                     copy .env.example .env
                     "%PHP_PATH%" artisan key:generate --force
                     composer exec -- phpunit --testsuite=Feature --log-junit junit-feature.xml
