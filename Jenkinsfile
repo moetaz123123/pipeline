@@ -137,6 +137,14 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts artifacts: 'trivy-report.html', allowEmptyArchive: true
+                            publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: '.',
+                                reportFiles: 'trivy-report.html',
+                                reportName: 'Trivy Security Report'
+                            ])
                             echo '✅ Security scan completed'
                         }
                     }
@@ -147,6 +155,35 @@ pipeline {
                 withSonarQubeEnv('ayoub') {
                     bat 'vendor\\bin\\phpunit --coverage-clover=coverage.xml'
                     bat '"C:\\Users\\MSI\\Downloads\\sonar-scanner-cli-7.1.0.4889-windows-x64\\sonar-scanner-7.1.0.4889-windows-x64\\bin\\sonar-scanner.bat" -Dsonar.projectKey=laravel-app -Dsonar.php.coverage.reportPaths=coverage.xml -Dsonar.sources=app -Dsonar.tests=tests -Dsonar.host.url=http://localhost:9000 -Dsonar.login=%SONAR_AUTH_TOKEN%'
+                }
+            }
+        }
+
+        stage('SonarQube HTML Report') {
+            steps {
+                echo '📄 Generating SonarQube HTML report...'
+                script {
+                    bat '''
+                        docker run --rm -v "%cd%:/app" cnescatlab/sonar-cnes-report:latest ^
+                          -s http://localhost:9000 ^
+                          -t %SONAR_AUTH_TOKEN% ^
+                          -p laravel-app ^
+                          -o sonar-report.html
+                    '''
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'sonar-report.html', allowEmptyArchive: true
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: '.',
+                        reportFiles: 'sonar-report.html',
+                        reportName: 'SonarQube HTML Report'
+                    ])
+                    echo '✅ SonarQube HTML report published'
                 }
             }
         }
