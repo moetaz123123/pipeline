@@ -92,14 +92,7 @@ pipeline {
                     post {
                         always {
                             junit 'junit-unit.xml'
-                            publishHTML([
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: 'coverage',
-                                reportFiles: 'index.html',
-                                reportName: 'Unit Test Coverage'
-                            ])
+                            archiveArtifacts artifacts: 'coverage/**/*', allowEmptyArchive: true
                             echo '✅ Unit tests completed'
                         }
                     }
@@ -125,7 +118,7 @@ pipeline {
 
                 stage('Security Scan') {
                     steps {
-                        echo '�� Running Trivy scan via Docker...'
+                        echo '🔒 Running Trivy scan via Docker...'
                         script {
                             bat '''
                                 echo Début du scan Trivy via Docker...
@@ -173,14 +166,7 @@ Please check:
 - Docker image availability'''
                                 }
                             }
-                            publishHTML([
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: '.',
-                                reportFiles: 'trivy-report.txt',
-                                reportName: 'Trivy Security Report'
-                            ])
+                            archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
                             echo '✅ Security scan completed'
                         }
                     }
@@ -246,14 +232,7 @@ Please check:
             }
             post {
                 always {
-                    publishHTML([
-                        allowMissing: true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'infection-report',
-                        reportFiles: 'index.html',
-                        reportName: 'Mutation Test Report'
-                    ])
+                    archiveArtifacts artifacts: 'infection-report/**/*', allowEmptyArchive: true
                     echo '✅ Mutation tests completed'
                 }
             }
@@ -293,14 +272,7 @@ Please check:
                     }
                     post {
                         always {
-                            publishHTML([
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: '.',
-                                reportFiles: 'trivy-image-report.txt',
-                                reportName: 'Trivy Docker Image Report'
-                            ])
+                            archiveArtifacts artifacts: 'trivy-image-report.txt', allowEmptyArchive: true
                             echo '✅ Docker image scan completed'
                         }
                     }
