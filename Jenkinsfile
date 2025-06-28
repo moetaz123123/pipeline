@@ -22,7 +22,30 @@ pipeline {
         
         stage('Install Dependencies') {
             steps {
-                bat '"%COMPOSER_PATH%" install --optimize-autoloader --no-interaction'
+                bat '''
+                    echo Vérification de Composer...
+                    composer --version >nul 2>&1
+                    if errorlevel 1 (
+                        echo Composer non trouvé globalement, vérification locale...
+                        if exist composer.phar (
+                            echo Utilisation de composer.phar local
+                            php composer.phar install --optimize-autoloader --no-interaction
+                        ) else (
+                            echo Installation de Composer localement...
+                            powershell -Command "Invoke-WebRequest -Uri https://getcomposer.org/composer.phar -OutFile composer.phar"
+                            php composer.phar install --optimize-autoloader --no-interaction
+                        )
+                    ) else (
+                        echo Composer trouvé globalement
+                        composer install --optimize-autoloader --no-interaction
+                    )
+                    
+                    if errorlevel 1 (
+                        echo Erreur lors de l'installation des dépendances
+                        exit /b 1
+                    )
+                    echo Dépendances installées avec succès
+                '''
             }
         }
         
