@@ -125,13 +125,63 @@ pipeline {
 
                 stage('Security Scan') {
                     steps {
-                        echo '🔒 Running Security scan...'
+                        echo '🔒 Running Trivy scan (identique au terminal)...'
                         script {
                             bat '''
-                                "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" fs . --skip-files vendor/laravel/pint/builds/pint --severity HIGH,CRITICAL --format table --output trivy-report.txt
-                                if errorlevel 1 echo Trivy scan completed
-                                "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt
-                                if errorlevel 1 echo Trivy composer scan completed
+                                "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" fs . --skip-files vendor/laravel/pint/builds/pint --format table --output trivy-report.txt
+                            '''
+                        }
+                    }
+                    post {
+                        always {
+                            script {
+                                def report = readFile('trivy-report.txt')
+                                echo "=== Trivy Report ===\\n${report}"
+                            }
+                            publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: '.',
+                                reportFiles: 'trivy-report.txt',
+                                reportName: 'Trivy Security Report'
+                            ])
+                        }
+                    }
+                }
+
+                // Alternative Security Scan Stage (uncomment if needed)
+                /*
+                stage('Alternative Security Scan') {
+                    steps {
+                        echo '🔒 Running Alternative Security scan...'
+                        script {
+                            bat '''
+                                echo Utilisation d'une approche alternative pour Trivy...
+                                
+                                echo Pré-téléchargement de la base de données...
+                                "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" image --download-db-only --cache-dir "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\pipeline-laravel\\.trivycache" --timeout 600s
+                                if errorlevel 1 (
+                                    echo Pré-téléchargement échoué, tentative avec options de sécurité...
+                                    "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" image --download-db-only --cache-dir "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\pipeline-laravel\\.trivycache" --timeout 600s --insecure
+                                )
+                                
+                                echo Scan avec base de données locale...
+                                "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" fs . --skip-files vendor/laravel/pint/builds/pint --severity HIGH,CRITICAL --format table --output trivy-report.txt --cache-dir "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\pipeline-laravel\\.trivycache" --timeout 300s
+                                if errorlevel 1 (
+                                    echo Scan échoué, création d'un rapport d'erreur...
+                                    echo "Alternative Trivy scan failed" > trivy-report.txt
+                                    echo "Database download or scan timeout" >> trivy-report.txt
+                                )
+                                
+                                echo Scan composer.lock avec base locale...
+                                "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt --cache-dir "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\pipeline-laravel\\.trivycache" --timeout 300s
+                                if errorlevel 1 (
+                                    echo Scan composer.lock échoué...
+                                    echo "Alternative Trivy composer scan failed" > trivy-composer-report.txt
+                                )
+                                
+                                echo Alternative scan terminé
                             '''
                         }
                     }
@@ -143,12 +193,13 @@ pipeline {
                                 keepAll: true,
                                 reportDir: '.',
                                 reportFiles: 'trivy-*-report.txt',
-                                reportName: 'Trivy Security Report'
+                                reportName: 'Alternative Trivy Security Report'
                             ])
-                            echo '✅ Security scan completed'
+                            echo '✅ Alternative Security scan completed'
                         }
                     }
                 }
+                */
 
                 stage('SonarQube Analysis') {
                     steps {
