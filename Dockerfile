@@ -41,5 +41,5 @@ RUN if [ -f .env ]; then \
 
 EXPOSE 8000
 
-# Use the server.php file for development
-CMD ["php", "-S", "0.0.0.0:8000", "-t", "public", "server.php"]
+# Use the correct command for Laravel development server
+CMD ["php", "-S", "0.0.0.0:8000", "server.php"]
