@@ -248,10 +248,77 @@ ${readFile('trivy-report.txt')}
             }
         }
 
+        stage('Trivy Code Scan') {
+            steps {
+                bat '''
+                    echo === Scan de sécurité Trivy (code) ===
+                    "%TRIVY_PATH%" fs . --skip-files vendor/laravel/pint/builds/pint --timeout 120s > trivy-report.txt 2>&1
+                    if exist trivy-report.txt (
+                        echo Fichier trivy-report.txt créé avec succès
+                    ) else (
+                        echo AVERTISSEMENT: Fichier trivy-report.txt non créé, création d'un rapport vide
+                        echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-report.txt
+                    )
+                '''
+            }
+            post {
+                always {
+                    bat 'type trivy-report.txt'
+                    script {
+                        def trivyText = readFile('trivy-report.txt')
+                        writeFile file: 'trivy-report.html', text: """
+                            <html>
+                            <head>
+                                <meta charset='UTF-8'>
+                                <style>
+                                    body { background: #222; color: #eee; }
+                                    pre { font-family: monospace; font-size: 13px; }
+                                </style>
+                            </head>
+                            <body>
+                                <pre>
+${trivyText}
+                                </pre>
+                            </body>
+                            </html>
+                        """
+                    }
+                    publishHTML(target: [
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: '.',
+                        reportFiles: 'trivy-report.html',
+                        reportName: 'Trivy Security Scan (Tableaux CLI)'
+                    ])
+                }
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 bat '''
                     echo === Construction de l'image Docker ===
+                    echo Vérification de la présence du fichier .env...
+                    if not exist .env (
+                        echo AVERTISSEMENT: Fichier .env non trouvé, création d'un fichier .env de base
+                        echo APP_NAME=Laravel > .env
+                        echo APP_ENV=local >> .env
+                        echo APP_KEY= >> .env
+                        echo APP_DEBUG=true >> .env
+                        echo APP_URL=http://localhost:8000 >> .env
+                        echo DB_CONNECTION=mysql >> .env
+                        echo DB_HOST=db >> .env
+                        echo DB_PORT=3306 >> .env
+                        echo DB_DATABASE=laravel_multitenant >> .env
+                        echo DB_USERNAME=root >> .env
+                        echo DB_PASSWORD=rootpassword >> .env
+                        echo Fichier .env créé avec succès
+                    ) else (
+                        echo Fichier .env trouvé
+                    )
+                    
+                    echo Construction de l'image Docker...
                     docker build -t %DOCKER_IMAGE% .
                     if errorlevel 1 (
                         echo ERREUR: Échec de la construction Docker
