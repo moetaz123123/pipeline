@@ -307,13 +307,6 @@ Please check:
                     }
                 }
 
-                stage('Checkpoint - Code Quality Review') {
-                    steps {
-                        echo '⏸️ Waiting for code quality review approval...'
-                        input message: 'Code quality and security checks completed. Do you want to continue?', ok: 'Continue to Build'
-                    }
-                }
-
                 stage('Mutation Tests') {
                     steps {
                         echo '🧬 Running Mutation tests...'
@@ -342,6 +335,13 @@ Please check:
                         }
                     }
                 }
+            }
+        }
+
+        stage('Checkpoint - Code Quality Review') {
+            steps {
+                echo '⏸️ Waiting for code quality review approval...'
+                input message: 'Code quality and security checks completed. Do you want to continue?', ok: 'Continue to Build'
             }
         }
 
