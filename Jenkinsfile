@@ -26,28 +26,17 @@ pipeline {
             steps {
                 bat '''
                     echo === Installation des dépendances ===
-                    composer --version >nul 2>&1
-                    if errorlevel 1 (
-                        echo Composer non trouvé globalement, installation locale...
-                        if exist composer.phar (
-                            "%PHP_PATH%" composer.phar install --optimize-autoloader --no-interaction
-                        ) else (
-                            powershell -Command "Invoke-WebRequest -Uri https://getcomposer.org/composer.phar -OutFile composer.phar"
-                            "%PHP_PATH%" composer.phar install --optimize-autoloader --no-interaction
-                        )
-                    ) else (
-                        composer install --optimize-autoloader --no-interaction
+                    if not exist composer.phar (
+                        powershell -Command "Invoke-WebRequest -Uri https://getcomposer.org/composer.phar -OutFile composer.phar"
                     )
-                    
+                    "%PHP_PATH%" composer.phar install --optimize-autoloader --no-interaction
                     if errorlevel 1 (
                         echo ERREUR: Échec de l'installation des dépendances
                         exit /b 1
                     )
-                    
                     echo Configuration des plugins...
-                    composer config allow-plugins.infection/extension-installer true
-                    composer require --dev infection/infection
-                    
+                    "%PHP_PATH%" composer.phar config allow-plugins.infection/extension-installer true
+                    "%PHP_PATH%" composer.phar require --dev infection/infection
                     echo === Dépendances installées avec succès ===
                 '''
                 bat 'dir vendor\\bin'
@@ -209,14 +198,7 @@ ${readFile('trivy-report.txt')}
             steps {
                 bat '''
                     echo === Tests unitaires ===
-                    if exist vendor\\bin\\phpunit.bat (
-                        "%PHP_PATH%" vendor\\bin\\phpunit.bat --testsuite=Unit --log-junit junit-unit.xml --coverage-html=coverage-html
-                    ) else if exist vendor\\bin\\phpunit (
-                        "%PHP_PATH%" vendor\\bin\\phpunit --testsuite=Unit --log-junit junit-unit.xml --coverage-html=coverage-html
-                    ) else (
-                        echo AVERTISSEMENT: PHPUnit non trouvé, génération d'un rapport de test vide
-                        echo ^<?xml version="1.0" encoding="UTF-8"?^>^<testsuites^>^</testsuites^> > junit-unit.xml
-                    )
+                    composer exec -- phpunit --testsuite=Unit --log-junit junit-unit.xml --coverage-html=coverage-html
                     if errorlevel 1 (
                         echo ERREUR: Tests unitaires échoués
                         exit /b 1
