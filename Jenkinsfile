@@ -56,7 +56,11 @@ pipeline {
         stage('Trivy Scan') {
             steps {
                 bat 'docker build -t %DOCKER_IMAGE% .'
-                bat 'docker run --rm -v //var/run/docker.sock:/var/run/docker.sock aquasec/trivy image %DOCKER_IMAGE% --format html --output trivy-report.html'
+                bat 'docker run --rm -v //var/run/docker.sock:/var/run/docker.sock aquasec/trivy image %DOCKER_IMAGE% --format json --output trivy-report.json'
+                bat '''
+                    echo Création du rapport HTML Trivy...
+                    echo ^<html^>^<head^>^<title^>Trivy Security Scan Report^</title^>^<style^>body{font-family:Arial,sans-serif;margin:20px;}table{border-collapse:collapse;width:100%%;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#f2f2f2;}h1{color:#333;}^</style^>^</head^>^<body^>^<h1^>Trivy Security Scan Report^</h1^>^<p^>Scan completed for image: %DOCKER_IMAGE%^</p^>^<p^>JSON report saved as: trivy-report.json^</p^>^<p^>Check the JSON file for detailed vulnerability information.^</p^>^</body^>^</html^> > trivy-report.html
+                '''
             }
             post {
                 always {
