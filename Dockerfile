@@ -15,9 +15,14 @@ COPY --from=composer:2.5 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www
 
-COPY . .
+# Copy composer files first for better caching
+COPY composer.json composer.lock ./
 
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader
+# Install dependencies
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-scripts
+
+# Copy the rest of the application
+COPY . .
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www \
@@ -25,8 +30,14 @@ RUN chown -R www-data:www-data /var/www \
     && chmod -R 755 /var/www/bootstrap/cache \
     && chmod +x /var/www/artisan
 
-# Generate application key if not set
-RUN php artisan key:generate --force
+# Generate application key if .env exists and APP_KEY is not set
+RUN if [ -f .env ]; then \
+        if ! grep -q "APP_KEY=base64:" .env; then \
+            php artisan key:generate --force || echo "Key generation failed, continuing..."; \
+        fi; \
+    else \
+        echo "No .env file found, key generation skipped"; \
+    fi
 
 EXPOSE 8000
 
