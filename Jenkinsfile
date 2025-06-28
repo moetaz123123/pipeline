@@ -59,7 +59,7 @@ pipeline {
                 bat '''
                     echo === Scan de sécurité Trivy ===
                     echo Exécution du scan Trivy...
-                    "%TRIVY_PATH%" fs . --skip-files vendor/laravel/pint/builds/pint --format table --timeout 120s > trivy-report.txt 2>&1
+                    "%TRIVY_PATH%" fs . --skip-files vendor/laravel/pint/builds/pint --timeout 120s > trivy-report.txt 2>&1
                     
                     echo Vérification du fichier de rapport...
                     if exist trivy-report.txt (
@@ -91,7 +91,7 @@ pipeline {
                     echo ^<h1^>Trivy Security Scan Report^</h1^> >> trivy-report.html
                     echo ^<h2^>Scan Details^</h2^> >> trivy-report.html
                     echo ^<p^>Scan completed for directory: %WORKSPACE%^</p^> >> trivy-report.html
-                    echo ^<p^>Command: trivy fs . --skip-files vendor/laravel/pint/builds/pint --format table --timeout 120s^</p^> >> trivy-report.html
+                    echo ^<p^>Command: trivy fs . --skip-files vendor/laravel/pint/builds/pint --timeout 120s^</p^> >> trivy-report.html
                     echo ^<h2^>Scan Results^</h2^> >> trivy-report.html
                     echo ^<pre^> >> trivy-report.html
                     
@@ -128,6 +128,14 @@ pipeline {
                         withSonarQubeEnv('SonarQube') {
                             bat """
                                 echo Vérification de la connexion SonarQube...
+                                echo Test de connexion à SonarQube...
+                                curl -s -u %SONAR_TOKEN%: http://localhost:9000/api/system/status >nul 2>&1
+                                if errorlevel 1 (
+                                    echo ERREUR: Impossible de se connecter à SonarQube
+                                    echo Vérifiez que SonarQube est démarré sur http://localhost:9000
+                                    exit /b 1
+                                )
+                                
                                 echo Vérification de PHPUnit...
                                 if exist vendor\\bin\\phpunit.bat (
                                     echo Génération du rapport de couverture...
@@ -140,10 +148,13 @@ pipeline {
                                     echo ^<?xml version=\"1.0\" encoding=\"UTF-8\"?^>^<coverage^>^</coverage^> > coverage.xml
                                     echo ^<?xml version=\"1.0\" encoding=\"UTF-8\"?^>^<testsuites^>^</testsuites^> > phpunit-report.xml
                                 )
+                                
                                 echo Lancement de sonar-scanner...
                                 \"%SONAR_SCANNER_PATH%\" -Dsonar.projectKey=SonarQube -Dsonar.host.url=http://localhost:9000 -Dsonar.login=%SONAR_TOKEN%
                                 if errorlevel 1 (
                                     echo ERREUR: Échec de l'analyse SonarQube
+                                    echo Vérifiez les permissions du token SonarQube
+                                    echo Vérifiez que le projet SonarQube existe dans SonarQube
                                     exit /b 1
                                 )
                                 echo === Analyse SonarQube terminée avec succès ===
@@ -153,6 +164,14 @@ pipeline {
                         echo "Fichier sonar-project.properties manquant, utilisation de la configuration inline"
                         withSonarQubeEnv('SonarQube') {
                             bat """
+                                echo Test de connexion à SonarQube...
+                                curl -s -u %SONAR_TOKEN%: http://localhost:9000/api/system/status >nul 2>&1
+                                if errorlevel 1 (
+                                    echo ERREUR: Impossible de se connecter à SonarQube
+                                    echo Vérifiez que SonarQube est démarré sur http://localhost:9000
+                                    exit /b 1
+                                )
+                                
                                 echo Vérification de PHPUnit...
                                 if exist vendor\\bin\\phpunit.bat (
                                     echo Génération du rapport de couverture...
@@ -165,6 +184,7 @@ pipeline {
                                     echo ^<?xml version=\"1.0\" encoding=\"UTF-8\"?^>^<coverage^>^</coverage^> > coverage.xml
                                     echo ^<?xml version=\"1.0\" encoding=\"UTF-8\"?^>^<testsuites^>^</testsuites^> > phpunit-report.xml
                                 )
+                                
                                 echo Lancement de sonar-scanner avec configuration inline...
                                 \"%SONAR_SCANNER_PATH%\" ^
                                     -Dsonar.projectKey=SonarQube ^
@@ -178,6 +198,8 @@ pipeline {
                                     -Dsonar.login=%SONAR_TOKEN%
                                 if errorlevel 1 (
                                     echo ERREUR: Échec de l'analyse SonarQube
+                                    echo Vérifiez les permissions du token SonarQube
+                                    echo Vérifiez que le projet SonarQube existe dans SonarQube
                                     exit /b 1
                                 )
                                 echo === Analyse SonarQube terminée avec succès ===
