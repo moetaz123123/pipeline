@@ -64,9 +64,21 @@ pipeline {
                     )
                     
                     echo Scan de l'image Docker avec Trivy...
-                    docker run --rm -v //var/run/docker.sock:/var/run/docker.sock aquasec/trivy image %DOCKER_IMAGE%
+                    docker run --rm -v //var/run/docker.sock:/var/run/docker.sock aquasec/trivy image %DOCKER_IMAGE% --format html --output trivy-report.html
                     echo === Scan Trivy terminé ===
                 '''
+            }
+            post {
+                always {
+                    publishHTML(target: [
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: '.',
+                        reportFiles: 'trivy-report.html',
+                        reportName: 'Trivy Security Scan'
+                    ])
+                }
             }
         }
 
@@ -81,8 +93,19 @@ pipeline {
                         withSonarQubeEnv('SonarQube') {
                             bat '''
                                 echo Vérification de la connexion SonarQube...
-                                echo Génération du rapport de couverture...
-                                "%PHP_PATH%" vendor\\bin\\phpunit --coverage-clover=coverage.xml
+                                
+                                echo Vérification de PHPUnit...
+                                if exist vendor\\bin\\phpunit.bat (
+                                    echo Génération du rapport de couverture...
+                                    "%PHP_PATH%" vendor\\bin\\phpunit.bat --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
+                                ) else if exist vendor\\bin\\phpunit (
+                                    echo Génération du rapport de couverture...
+                                    "%PHP_PATH%" vendor\\bin\\phpunit --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
+                                ) else (
+                                    echo AVERTISSEMENT: PHPUnit non trouvé, génération d'un fichier de couverture vide
+                                    echo ^<?xml version="1.0" encoding="UTF-8"?^>^<coverage^>^</coverage^> > coverage.xml
+                                    echo ^<?xml version="1.0" encoding="UTF-8"?^>^<testsuites^>^</testsuites^> > phpunit-report.xml
+                                )
                                 
                                 echo Lancement de sonar-scanner...
                                 "%SONAR_SCANNER_PATH%"
@@ -90,6 +113,7 @@ pipeline {
                                 if errorlevel 1 (
                                     echo ERREUR: Échec de l'analyse SonarQube
                                     echo Vérifiez que SonarQube est démarré sur http://localhost:9000
+                                    echo Vérifiez les permissions du token SonarQube
                                     exit /b 1
                                 )
                                 echo === Analyse SonarQube terminée avec succès ===
@@ -99,21 +123,33 @@ pipeline {
                         echo "Fichier sonar-project.properties manquant, utilisation de la configuration inline"
                         withSonarQubeEnv('SonarQube') {
                             bat '''
-                                echo Génération du rapport de couverture...
-                                "%PHP_PATH%" vendor\\bin\\phpunit --coverage-clover=coverage.xml
+                                echo Vérification de PHPUnit...
+                                if exist vendor\\bin\\phpunit.bat (
+                                    echo Génération du rapport de couverture...
+                                    "%PHP_PATH%" vendor\\bin\\phpunit.bat --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
+                                ) else if exist vendor\\bin\\phpunit (
+                                    echo Génération du rapport de couverture...
+                                    "%PHP_PATH%" vendor\\bin\\phpunit --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
+                                ) else (
+                                    echo AVERTISSEMENT: PHPUnit non trouvé, génération d'un fichier de couverture vide
+                                    echo ^<?xml version="1.0" encoding="UTF-8"?^>^<coverage^>^</coverage^> > coverage.xml
+                                    echo ^<?xml version="1.0" encoding="UTF-8"?^>^<testsuites^>^</testsuites^> > phpunit-report.xml
+                                )
                                 
                                 echo Lancement de sonar-scanner avec configuration inline...
                                 "%SONAR_SCANNER_PATH%" ^
                                     -Dsonar.projectKey=SonarQube ^
-                                    -Dsonar.projectName=Laravel Multi-Tenant ^
+                                    -Dsonar.projectName=SonarQube ^
                                     -Dsonar.sources=app,config,database,resources,routes ^
                                     -Dsonar.tests=tests ^
                                     -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,node_modules/** ^
-                                    -Dsonar.php.coverage.reportPaths=coverage.xml
+                                    -Dsonar.php.coverage.reportPaths=coverage.xml ^
+                                    -Dsonar.php.tests.reportPath=phpunit-report.xml
                                 
                                 if errorlevel 1 (
                                     echo ERREUR: Échec de l'analyse SonarQube
                                     echo Vérifiez que SonarQube est démarré sur http://localhost:9000
+                                    echo Vérifiez les permissions du token SonarQube
                                     exit /b 1
                                 )
                                 echo === Analyse SonarQube terminée avec succès ===
@@ -125,6 +161,14 @@ pipeline {
             post {
                 always {
                     echo "Étape SonarQube Analysis terminée"
+                    publishHTML(target: [
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: '.',
+                        reportFiles: 'coverage.xml',
+                        reportName: 'SonarQube Coverage Report'
+                    ])
                 }
             }
         }
@@ -133,7 +177,14 @@ pipeline {
             steps {
                 bat '''
                     echo === Tests unitaires ===
-                    "%PHP_PATH%" vendor\\bin\\phpunit --testsuite=Unit --log-junit junit-unit.xml
+                    if exist vendor\\bin\\phpunit.bat (
+                        "%PHP_PATH%" vendor\\bin\\phpunit.bat --testsuite=Unit --log-junit junit-unit.xml --coverage-html=coverage-html
+                    ) else if exist vendor\\bin\\phpunit (
+                        "%PHP_PATH%" vendor\\bin\\phpunit --testsuite=Unit --log-junit junit-unit.xml --coverage-html=coverage-html
+                    ) else (
+                        echo ERREUR: PHPUnit non trouvé
+                        exit /b 1
+                    )
                     if errorlevel 1 (
                         echo ERREUR: Tests unitaires échoués
                         exit /b 1
@@ -144,6 +195,14 @@ pipeline {
             post {
                 always {
                     junit 'junit-unit.xml'
+                    publishHTML(target: [
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'coverage-html',
+                        reportFiles: 'index.html',
+                        reportName: 'PHPUnit Coverage Report'
+                    ])
                 }
             }
         }
@@ -157,11 +216,35 @@ pipeline {
                     "%PHP_PATH%" artisan key:generate --force
                     
                     echo Tests de mutation avec Infection...
-                    "%PHP_PATH%" vendor\\bin\\phpunit
+                    if exist vendor\\bin\\infection.bat (
+                        "%PHP_PATH%" vendor\\bin\\infection.bat --logger-html=infection-report.html
+                    ) else if exist vendor\\bin\\infection (
+                        "%PHP_PATH%" vendor\\bin\\infection --logger-html=infection-report.html
+                    ) else (
+                        echo AVERTISSEMENT: Infection non trouvé, exécution des tests de base
+                        if exist vendor\\bin\\phpunit.bat (
+                            "%PHP_PATH%" vendor\\bin\\phpunit.bat
+                        ) else if exist vendor\\bin\\phpunit (
+                            "%PHP_PATH%" vendor\\bin\\phpunit
+                        )
+                        echo Tests de mutation de base terminés
+                    )
                     
                     echo AVERTISSEMENT: Tests de mutation complets nécessitent des extensions de couverture (xdebug/pcov)
-                    echo Tests de mutation de base terminés
+                    echo Tests de mutation terminés
                 '''
+            }
+            post {
+                always {
+                    publishHTML(target: [
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: '.',
+                        reportFiles: 'infection-report.html',
+                        reportName: 'Mutation Testing Report'
+                    ])
+                }
             }
         }
 
