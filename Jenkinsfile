@@ -281,7 +281,39 @@ Please check:
                             }
                         }
 
-                        stage('Scan Docker Image') {
+                        stage('Scan Docker Image A') {
+                            steps {
+                                echo '🔍 Scanning Docker image...'
+                                script {
+                                    bat '''
+                                        "%TRIVY_PATH%" image %DOCKER_IMAGE%:%DOCKER_TAG% ^
+                                            --severity HIGH,CRITICAL ^
+                                            --format html ^
+                                            --output trivy-report.html
+                                        if errorlevel 1 (
+                                            echo Docker image scan completed with vulnerabilities found
+                                            exit /b 0
+                                        )
+                                    '''
+                                }
+                            }
+                            post {
+                                always {
+                                    archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
+                                    echo '✅ Docker image scan completed'
+                                    publishHTML([
+                                        allowMissing: true,
+                                        alwaysLinkToLastBuild: true,
+                                        keepAll: true,
+                                        reportDir: '.',
+                                        reportFiles: 'trivy-report.html',
+                                        reportName: 'Trivy Security Report'
+                                    ])
+                                }
+                            }
+                        }
+
+                        stage('Scan Docker Image B') {
                             steps {
                                 echo '🔍 Scanning Docker image...'
                                 script {
