@@ -198,7 +198,7 @@ ${readFile('trivy-report.txt')}
             steps {
                 bat '''
                     echo === Tests unitaires ===
-                    composer exec -- phpunit --testsuite=Unit --log-junit junit-unit.xml --coverage-html=coverage-html
+                    composer exec -- phpunit --testsuite=Unit --log-junit junit-unit.xml
                     if errorlevel 1 (
                         echo ERREUR: Tests unitaires échoués
                         exit /b 1
@@ -209,14 +209,6 @@ ${readFile('trivy-report.txt')}
             post {
                 always {
                     junit 'junit-unit.xml'
-                    publishHTML(target: [
-                        allowMissing: true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'coverage-html',
-                        reportFiles: 'index.html',
-                        reportName: 'PHPUnit Coverage Report'
-                    ])
                 }
             }
         }
