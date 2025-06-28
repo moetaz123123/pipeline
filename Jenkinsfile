@@ -127,63 +127,25 @@ pipeline {
 
                 stage('Security Scan') {
                     steps {
-                        echo '🔒 Running Trivy scan (identique au terminal)...'
+                        echo '🔒 Running Trivy scan (HTML + TXT report)...'
                         script {
                             bat '''
-                                echo Début du scan Trivy (même commande que terminal)...
                                 docker run --rm -v "%cd%:/app" aquasec/trivy:latest fs /app --skip-files vendor/laravel/pint/builds/pint --format table --output trivy-report.txt --timeout 600s
-                                if errorlevel 1 (
-                                    echo Docker Trivy scan failed with error code %errorlevel%
-                                    echo "Docker Trivy scan failed - Error code: %errorlevel%" > trivy-report.txt
-                                    echo "Please check the logs above for details" >> trivy-report.txt
-                                ) else (
-                                    echo Docker Trivy scan completed successfully
-                                )
-                                
-                                echo Vérification du fichier de rapport...
-                                if exist trivy-report.txt (
-                                    echo Fichier trivy-report.txt trouvé
-                                    echo ========================================
-                                    echo RAPPORT TRIVY COMPLET:
-                                    echo ========================================
-                                    type trivy-report.txt
-                                    echo ========================================
-                                ) else (
-                                    echo Fichier trivy-report.txt non trouvé, création d'un rapport d'erreur
-                                    echo "Docker Trivy scan completed but report file not found" > trivy-report.txt
-                                    echo "This might indicate a silent failure in Docker Trivy" >> trivy-report.txt
-                                )
+                                docker run --rm -v "%cd%:/app" aquasec/trivy:latest fs /app --skip-files vendor/laravel/pint/builds/pint --format html --output trivy-report.html --timeout 600s
                             '''
                         }
                     }
                     post {
                         always {
-                            script {
-                                if (fileExists('trivy-report.txt')) {
-                                    def report = readFile('trivy-report.txt')
-                                    echo "========================================"
-                                    echo "RAPPORT TRIVY COMPLET (AFFICHAGE JENKINS):"
-                                    echo "========================================"
-                                    echo "${report}"
-                                    echo "========================================"
-                                } else {
-                                    echo "❌ Fichier trivy-report.txt non trouvé"
-                                    echo "Création d'un rapport d'erreur..."
-                                    writeFile file: 'trivy-report.txt', text: '''Docker Trivy scan failed - No report file generated
-This could be due to:
-1. Docker not running
-2. Docker permissions issues
-3. Network connectivity problems
-4. Docker image pull issues
-
-Please check:
-- Docker is running
-- Docker permissions for Jenkins user
-- Network connectivity
-- Docker image availability'''
-                                }
-                            }
-                            archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
+                            archiveArtifacts artifacts: 'trivy-report.*', allowEmptyArchive: true
+                            publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: '.',
+                                reportFiles: 'trivy-report.html',
+                                reportName: 'Trivy Security Report'
+                            ])
                             echo '✅ Security scan completed'
                         }
                     }
@@ -193,39 +155,51 @@ Please check:
                     steps {
                         echo '📊 Running SonarQube analysis...'
                         script {
-                            echo "=== Début de l'analyse SonarQube ==="
-                            
                             bat '''
-                                curl -f %SONARQUBE_URL% >nul 2>&1
-                                if errorlevel 1 (
-                                    echo SonarQube non accessible, démarrage via Docker...
-                                    docker run -d --name sonarqube -p 9000:9000 sonarqube:latest
-                                    timeout /t 60 /nobreak
+                                if not exist .sonar-scanner (
+                                    echo "SonarQube scanner not found, downloading..."
                                 )
                             '''
-                            
-                            if (fileExists('sonar-project.properties')) {
-                                bat '''
-                                    echo Configuration SonarQube:
-                                    type sonar-project.properties
-                                    docker run --rm -e SONAR_HOST_URL=%SONARQUBE_URL% -e SONAR_LOGIN=%SONAR_TOKEN% -v "%WORKSPACE%:/usr/src" sonarsource/sonar-scanner-cli
-                                '''
-                            } else {
-                                bat '''
-                                    docker run --rm -e SONAR_HOST_URL=%SONARQUBE_URL% -e SONAR_LOGIN=%SONAR_TOKEN% -v "%WORKSPACE%:/usr/src" sonarsource/sonar-scanner-cli ^
-                                        -Dsonar.projectKey=laravel-multitenant ^
-                                        -Dsonar.sources=app,config,database,resources,routes ^
-                                        -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,tests/** ^
-                                        -Dsonar.php.coverage.reportPaths=coverage.xml
-                                '''
-                            }
-
-                            echo "=== Fin de l'analyse SonarQube ==="
+                            bat '''
+                                docker run --rm -e SONAR_HOST_URL=%SONARQUBE_URL% -e SONAR_LOGIN=%SONAR_TOKEN% -v "%WORKSPACE%:/usr/src" sonarsource/sonar-scanner-cli ^
+                                    -Dsonar.projectKey=laravel-multitenant ^
+                                    -Dsonar.sources=app,config,database,resources,routes ^
+                                    -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,tests/**
+                            '''
                         }
                     }
                     post {
                         always {
                             echo "✅ SonarQube analysis completed"
+                        }
+                    }
+                }
+
+                stage('SonarQube HTML Report') {
+                    steps {
+                        echo '📄 Generating SonarQube HTML report...'
+                        script {
+                            bat '''
+                                docker run --rm -v "%cd%:/app" cnescatlab/sonar-cnes-report:latest \
+                                  -s http://host.docker.internal:9000 \
+                                  -t %SONAR_TOKEN% \
+                                  -p laravel-multitenant \
+                                  -o sonar-report.html
+                            '''
+                        }
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'sonar-report.html', allowEmptyArchive: true
+                            publishHTML([
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: '.',
+                                reportFiles: 'sonar-report.html',
+                                reportName: 'SonarQube HTML Report'
+                            ])
+                            echo '✅ SonarQube HTML report published'
                         }
                     }
                 }
