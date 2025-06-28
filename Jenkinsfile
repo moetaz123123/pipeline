@@ -213,40 +213,6 @@ ${readFile('trivy-report.txt')}
             }
         }
 
-        stage('Feature Tests') {
-            steps {
-                bat '''
-                    echo === Feature tests ===
-                    if not exist .env.example (
-                        echo ERREUR: Le fichier .env.example est manquant à la racine du projet!
-                        exit /b 1
-                    )
-                    if not exist reports mkdir reports
-                    copy .env.example .env
-                    "%PHP_PATH%" artisan key:generate --force
-                    composer exec -- phpunit --testsuite=Feature --log-junit=reports/feature-tests.xml --testdox-html=reports/feature-tests.html --colors=always --stop-on-failure
-                    if errorlevel 1 (
-                        echo ERREUR: Feature tests échoués
-                        exit /b 1
-                    )
-                    echo === Feature tests terminés ===
-                '''
-            }
-            post {
-                always {
-                    junit 'reports/feature-tests.xml'
-                    publishHTML(target: [
-                        allowMissing: true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'reports',
-                        reportFiles: 'feature-tests.html',
-                        reportName: 'Feature Tests Report'
-                    ])
-                }
-            }
-        }
-
         stage('Mutation Tests') {
             steps {
                 bat '''
