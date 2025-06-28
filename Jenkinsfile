@@ -248,53 +248,6 @@ ${readFile('trivy-report.txt')}
             }
         }
 
-        stage('Trivy Code Scan') {
-            steps {
-                bat '''
-                    echo === Scan de sécurité Trivy (code) ===
-                    "%TRIVY_PATH%" fs . --skip-files vendor/laravel/pint/builds/pint --timeout 120s > trivy-report.txt 2>&1
-                    if exist trivy-report.txt (
-                        echo Fichier trivy-report.txt créé avec succès
-                    ) else (
-                        echo AVERTISSEMENT: Fichier trivy-report.txt non créé, création d'un rapport vide
-                        echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-report.txt
-                    )
-                '''
-            }
-            post {
-                always {
-                    bat 'type trivy-report.txt'
-                    script {
-                        def trivyText = readFile('trivy-report.txt')
-                        writeFile file: 'trivy-report.html', text: """
-                            <html>
-                            <head>
-                                <meta charset='UTF-8'>
-                                <style>
-                                    body { background: #222; color: #eee; }
-                                    pre { font-family: monospace; font-size: 13px; }
-                                </style>
-                            </head>
-                            <body>
-                                <pre>
-${trivyText}
-                                </pre>
-                            </body>
-                            </html>
-                        """
-                    }
-                    publishHTML(target: [
-                        allowMissing: true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: '.',
-                        reportFiles: 'trivy-report.html',
-                        reportName: 'Trivy Security Scan (Tableaux CLI)'
-                    ])
-                }
-            }
-        }
-
         stage('Build Docker Image') {
             steps {
                 bat '''
