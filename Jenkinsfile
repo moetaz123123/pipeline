@@ -53,37 +53,6 @@ pipeline {
             }
         }
 
-        stage('Setup Laravel') {
-            steps {
-                bat '''
-                    echo === Configuration de Laravel ===
-                    
-                    if exist .env.example (
-                        copy .env.example .env
-                        echo Fichier .env créé à partir de .env.example
-                    ) else (
-                        echo APP_NAME=Laravel> .env
-                        echo Fichier .env créé avec configuration de base
-                    )
-                    
-                    echo Configuration pour les tests...
-                    echo APP_ENV=testing>> .env
-                    echo APP_DEBUG=true>> .env
-                    echo DB_CONNECTION=sqlite>> .env
-                    echo DB_DATABASE=:memory:>> .env
-                    echo CACHE_DRIVER=array>> .env
-                    echo SESSION_DRIVER=array>> .env
-                    echo QUEUE_DRIVER=sync>> .env
-                    echo MAIL_MAILER=array>> .env
-                    
-                    echo Génération de la clé d'application...
-                    "%PHP_PATH%" artisan key:generate --force
-                    
-                    echo === Configuration Laravel terminée ===
-                '''
-            }
-        }
-
         stage('Trivy Scan') {
             steps {
                 bat '''
