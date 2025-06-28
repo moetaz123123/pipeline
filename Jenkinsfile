@@ -365,8 +365,8 @@ ${trivyImageText}
                     echo === Déploiement ===
                     "%PHP_PATH%" artisan migrate --force
                     "%PHP_PATH%" artisan db:seed --force
-                    docker run -d --rm -p 8080:80 %DOCKER_IMAGE%
-                    echo === Application déployée sur http://localhost:8080 ===
+                    docker run -d --rm -p 8000:80 %DOCKER_IMAGE%
+                    echo === Application déployée sur http://localhost:8000 ===
                 '''
             }
         }
