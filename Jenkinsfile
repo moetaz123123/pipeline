@@ -213,42 +213,64 @@ ${readFile('trivy-report.txt')}
             }
         }
 
-        stage('Mutation Tests') {
+        stage('Feature Tests') {
             steps {
                 bat '''
-                    echo === Tests de mutation ===
-                    copy .env .env.backup
-                    copy .env.example .env
-                    "%PHP_PATH%" artisan key:generate --force
-                    
-                    echo Tests de mutation avec Infection...
-                    if exist vendor\\bin\\infection.bat (
-                        "%PHP_PATH%" vendor\\bin\\infection.bat --logger-html=infection-report.html
-                    ) else if exist vendor\\bin\\infection (
-                        "%PHP_PATH%" vendor\\bin\\infection --logger-html=infection-report.html
-                    ) else (
-                        echo AVERTISSEMENT: Infection non trouvé, exécution des tests de base
-                        if exist vendor\\bin\\phpunit.bat (
-                            "%PHP_PATH%" vendor\\bin\\phpunit.bat
-                        ) else if exist vendor\\bin\\phpunit (
-                            "%PHP_PATH%" vendor\\bin\\phpunit
-                        )
-                        echo Tests de mutation de base terminés
+                    echo === Feature tests ===
+                    composer exec -- phpunit --testsuite=Feature --log-junit junit-feature.xml
+                    if errorlevel 1 (
+                        echo ERREUR: Feature tests échoués
+                        exit /b 1
                     )
-                    
-                    echo AVERTISSEMENT: Tests de mutation complets nécessitent des extensions de couverture (xdebug/pcov)
-                    echo Tests de mutation terminés
+                    echo === Feature tests terminés ===
                 '''
             }
             post {
                 always {
+                    junit 'junit-feature.xml'
+                }
+            }
+        }
+
+        stage('Trivy Scan') {
+            steps {
+                bat '''
+                    echo === Scan de sécurité Trivy (code) ===
+                    "%TRIVY_PATH%" fs . --skip-files vendor/laravel/pint/builds/pint --timeout 120s > trivy-report.txt 2>&1
+                    if exist trivy-report.txt (
+                        echo Fichier trivy-report.txt créé avec succès
+                    ) else (
+                        echo AVERTISSEMENT: Fichier trivy-report.txt non créé, création d'un rapport vide
+                        echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-report.txt
+                    )
+                '''
+            }
+            post {
+                always {
+                    bat 'type trivy-report.txt'
+                    writeFile file: 'trivy-report.html', text: """
+                        <html>
+                        <head>
+                            <meta charset='UTF-8'>
+                            <style>
+                                body { background: #222; color: #eee; }
+                                pre { font-family: monospace; font-size: 13px; }
+                            </style>
+                        </head>
+                        <body>
+                            <pre>
+${readFile('trivy-report.txt')}
+                            </pre>
+                        </body>
+                        </html>
+                    """
                     publishHTML(target: [
                         allowMissing: true,
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
                         reportDir: '.',
-                        reportFiles: 'infection-report.html',
-                        reportName: 'Mutation Testing Report'
+                        reportFiles: 'trivy-report.html',
+                        reportName: 'Trivy Security Scan (Tableaux CLI)'
                     ])
                 }
             }
@@ -265,6 +287,50 @@ ${readFile('trivy-report.txt')}
                     )
                     echo === Image Docker construite ===
                 '''
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                bat '''
+                    echo === Scan de sécurité Trivy (image Docker) ===
+                    "%TRIVY_PATH%" image %DOCKER_IMAGE% --timeout 120s > trivy-image-report.txt 2>&1
+                    if exist trivy-image-report.txt (
+                        echo Fichier trivy-image-report.txt créé avec succès
+                    ) else (
+                        echo AVERTISSEMENT: Fichier trivy-image-report.txt non créé, création d'un rapport vide
+                        echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-image-report.txt
+                    )
+                '''
+            }
+            post {
+                always {
+                    bat 'type trivy-image-report.txt'
+                    writeFile file: 'trivy-image-report.html', text: """
+                        <html>
+                        <head>
+                            <meta charset='UTF-8'>
+                            <style>
+                                body { background: #222; color: #eee; }
+                                pre { font-family: monospace; font-size: 13px; }
+                            </style>
+                        </head>
+                        <body>
+                            <pre>
+${readFile('trivy-image-report.txt')}
+                            </pre>
+                        </body>
+                        </html>
+                    """
+                    publishHTML(target: [
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: '.',
+                        reportFiles: 'trivy-image-report.html',
+                        reportName: 'Trivy Docker Image Security Scan'
+                    ])
+                }
             }
         }
 
