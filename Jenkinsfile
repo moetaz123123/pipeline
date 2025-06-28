@@ -141,14 +141,6 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts artifacts: 'trivy-report.html', allowEmptyArchive: true
-                            publishHTML([
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: '.',
-                                reportFiles: 'trivy-report.html',
-                                reportName: 'Trivy Security Report'
-                            ])
                             echo '✅ Security scan completed'
                         }
                     }
