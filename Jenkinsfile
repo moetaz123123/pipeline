@@ -59,7 +59,7 @@ pipeline {
                 bat '''
                     echo === Scan de sécurité Trivy ===
                     echo Exécution du scan Trivy...
-                    docker run --rm -v "%WORKSPACE%:/app" aquasec/trivy fs /app --skip-files vendor/laravel/pint/builds/pint --format table > trivy-report.txt 2>&1
+                    docker run --rm -v "%WORKSPACE%:/app" aquasec/trivy fs /app --skip-files vendor/ --format table --timeout 120s > trivy-report.txt 2>&1
                     
                     echo Vérification du fichier de rapport...
                     if exist trivy-report.txt (
@@ -70,14 +70,48 @@ pipeline {
                     )
                     
                     echo Création du rapport HTML Trivy...
-                    echo ^<html^>^<head^>^<title^>Trivy Security Scan Report^</title^>^<style^>body{font-family:monospace;margin:20px;background-color:#f5f5f5;}pre{background-color:white;padding:15px;border:1px solid #ddd;border-radius:5px;overflow-x:auto;}h1{color:#333;border-bottom:2px solid #007acc;}h2{color:#007acc;}table{border-collapse:collapse;width:100%%;margin:10px 0;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#007acc;color:white;} .success{color:green;} .warning{color:orange;} .error{color:red;}^</style^>^</head^>^<body^>^<h1^>Trivy Security Scan Report^</h1^>^<h2^>Scan Details^</h2^>^<p^>Scan completed for directory: %WORKSPACE%^</p^>^<p^>Command: trivy fs /app --skip-files vendor/laravel/pint/builds/pint --format table^</p^>^<h2^>Scan Results^</h2^>^<pre^> > trivy-report.html
+                    (
+                        echo ^<html^>
+                        echo ^<head^>
+                        echo ^<title^>Trivy Security Scan Report^</title^>
+                        echo ^<style^>
+                        echo body { font-family: monospace; margin: 20px; background-color: #f5f5f5; }
+                        echo pre { background-color: white; padding: 15px; border: 1px solid #ddd; border-radius: 5px; overflow-x: auto; }
+                        echo h1 { color: #333; border-bottom: 2px solid #007acc; }
+                        echo h2 { color: #007acc; }
+                        echo table { border-collapse: collapse; width: 100%%; margin: 10px 0; }
+                        echo th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        echo th { background-color: #007acc; color: white; }
+                        echo .success { color: green; }
+                        echo .warning { color: orange; }
+                        echo .error { color: red; }
+                        echo ^</style^>
+                        echo ^</head^>
+                        echo ^<body^>
+                        echo ^<h1^>Trivy Security Scan Report^</h1^>
+                        echo ^<h2^>Scan Details^</h2^>
+                        echo ^<p^>Scan completed for directory: %WORKSPACE%^</p^>
+                        echo ^<p^>Command: trivy fs /app --skip-files vendor/ --format table --timeout 120s^</p^>
+                        echo ^<h2^>Scan Results^</h2^>
+                        echo ^<pre^>
+                    ) > trivy-report.html
                     
                     if exist trivy-report.txt (
                         type trivy-report.txt >> trivy-report.html
-                        echo ^</pre^>^<p class="success"^>^<strong^>✓^</strong^> Scan completed successfully. Check the detailed text report (trivy-report.txt) for complete vulnerability information.^</p^>^</body^>^</html^> >> trivy-report.html
+                        (
+                            echo ^</pre^>
+                            echo ^<p class="success"^>^<strong^>✓^</strong^> Scan completed successfully. Check the detailed text report (trivy-report.txt) for complete vulnerability information.^</p^>
+                            echo ^</body^>
+                            echo ^</html^>
+                        ) >> trivy-report.html
                     ) else (
-                        echo "Erreur: Impossible de lire le fichier trivy-report.txt" >> trivy-report.html
-                        echo ^</pre^>^<p class="error"^>^<strong^>✗^</strong^> Erreur lors de la génération du rapport Trivy.^</p^>^</body^>^</html^> >> trivy-report.html
+                        (
+                            echo "Erreur: Impossible de lire le fichier trivy-report.txt"
+                            echo ^</pre^>
+                            echo ^<p class="error"^>^<strong^>✗^</strong^> Erreur lors de la génération du rapport Trivy.^</p^>
+                            echo ^</body^>
+                            echo ^</html^>
+                        ) >> trivy-report.html
                     )
                     
                     echo Rapport HTML Trivy créé: trivy-report.html
@@ -101,74 +135,65 @@ pipeline {
             steps {
                 script {
                     echo "=== Début de l'analyse SonarQube ==="
-                    
-                    // Vérifier si le fichier de configuration existe
                     if (fileExists('sonar-project.properties')) {
                         echo "Fichier sonar-project.properties trouvé, utilisation de la configuration par défaut"
                         withSonarQubeEnv('SonarQube') {
-                            bat '''
+                            bat """
                                 echo Vérification de la connexion SonarQube...
-                                
                                 echo Vérification de PHPUnit...
                                 if exist vendor\\bin\\phpunit.bat (
                                     echo Génération du rapport de couverture...
-                                    "%PHP_PATH%" vendor\\bin\\phpunit.bat --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
+                                    \"%PHP_PATH%\" vendor\\bin\\phpunit.bat --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
                                 ) else if exist vendor\\bin\\phpunit (
                                     echo Génération du rapport de couverture...
-                                    "%PHP_PATH%" vendor\\bin\\phpunit --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
+                                    \"%PHP_PATH%\" vendor\\bin\\phpunit --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
                                 ) else (
                                     echo AVERTISSEMENT: PHPUnit non trouvé, génération d'un fichier de couverture vide
-                                    echo ^<?xml version="1.0" encoding="UTF-8"?^>^<coverage^>^</coverage^> > coverage.xml
-                                    echo ^<?xml version="1.0" encoding="UTF-8"?^>^<testsuites^>^</testsuites^> > phpunit-report.xml
+                                    echo ^<?xml version=\"1.0\" encoding=\"UTF-8\"?^>^<coverage^>^</coverage^> > coverage.xml
+                                    echo ^<?xml version=\"1.0\" encoding=\"UTF-8\"?^>^<testsuites^>^</testsuites^> > phpunit-report.xml
                                 )
-                                
                                 echo Lancement de sonar-scanner...
-                                "%SONAR_SCANNER_PATH%" -Dsonar.projectKey=SonarQube
-                                
+                                \"%SONAR_SCANNER_PATH%\" -Dsonar.projectKey=SonarQube -Dsonar.host.url=http://localhost:9000 -Dsonar.login=%SONAR_TOKEN%
                                 if errorlevel 1 (
                                     echo ERREUR: Échec de l'analyse SonarQube
-                                    echo Vérifiez que SonarQube est démarré sur http://localhost:9000
-                                    echo Vérifiez les permissions du token SonarQube
                                     exit /b 1
                                 )
                                 echo === Analyse SonarQube terminée avec succès ===
-                            '''
+                            """
                         }
                     } else {
                         echo "Fichier sonar-project.properties manquant, utilisation de la configuration inline"
                         withSonarQubeEnv('SonarQube') {
-                            bat '''
+                            bat """
                                 echo Vérification de PHPUnit...
                                 if exist vendor\\bin\\phpunit.bat (
                                     echo Génération du rapport de couverture...
-                                    "%PHP_PATH%" vendor\\bin\\phpunit.bat --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
+                                    \"%PHP_PATH%\" vendor\\bin\\phpunit.bat --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
                                 ) else if exist vendor\\bin\\phpunit (
                                     echo Génération du rapport de couverture...
-                                    "%PHP_PATH%" vendor\\bin\\phpunit --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
+                                    \"%PHP_PATH%\" vendor\\bin\\phpunit --coverage-clover=coverage.xml --log-junit=phpunit-report.xml
                                 ) else (
                                     echo AVERTISSEMENT: PHPUnit non trouvé, génération d'un fichier de couverture vide
-                                    echo ^<?xml version="1.0" encoding="UTF-8"?^>^<coverage^>^</coverage^> > coverage.xml
-                                    echo ^<?xml version="1.0" encoding="UTF-8"?^>^<testsuites^>^</testsuites^> > phpunit-report.xml
+                                    echo ^<?xml version=\"1.0\" encoding=\"UTF-8\"?^>^<coverage^>^</coverage^> > coverage.xml
+                                    echo ^<?xml version=\"1.0\" encoding=\"UTF-8\"?^>^<testsuites^>^</testsuites^> > phpunit-report.xml
                                 )
-                                
                                 echo Lancement de sonar-scanner avec configuration inline...
-                                "%SONAR_SCANNER_PATH%" ^
+                                \"%SONAR_SCANNER_PATH%\" ^
                                     -Dsonar.projectKey=SonarQube ^
                                     -Dsonar.projectName=SonarQube ^
                                     -Dsonar.sources=app,config,database,resources,routes ^
                                     -Dsonar.tests=tests ^
                                     -Dsonar.exclusions=vendor/**,storage/**,bootstrap/cache/**,node_modules/** ^
                                     -Dsonar.php.coverage.reportPaths=coverage.xml ^
-                                    -Dsonar.php.tests.reportPath=phpunit-report.xml
-                                
+                                    -Dsonar.php.tests.reportPath=phpunit-report.xml ^
+                                    -Dsonar.host.url=http://localhost:9000 ^
+                                    -Dsonar.login=%SONAR_TOKEN%
                                 if errorlevel 1 (
                                     echo ERREUR: Échec de l'analyse SonarQube
-                                    echo Vérifiez que SonarQube est démarré sur http://localhost:9000
-                                    echo Vérifiez les permissions du token SonarQube
                                     exit /b 1
                                 )
                                 echo === Analyse SonarQube terminée avec succès ===
-                            '''
+                            """
                         }
                     }
                 }
