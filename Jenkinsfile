@@ -7,7 +7,7 @@ pipeline {
         SONAR_TOKEN = credentials('sonar-token')
         DOCKER_REGISTRY = 'docker.io'
         DOCKER_USERNAME = 'moetaz1928'
-        COMPOSER_PATH = 'C:\\xampp\\composer\\composer.bat'
+        COMPOSER_PATH = 'composer'
         PHP_PATH = 'C:\\xampp\\php\\php.exe'
         TRIVY_PATH = 'C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe'
         SONARQUBE_URL = 'http://localhost:9000'
@@ -30,7 +30,7 @@ pipeline {
             steps {
                 echo '📦 Installing PHP dependencies...'
                 script {
-                    bat "\"${COMPOSER_PATH}\" install --optimize-autoloader --no-interaction"
+                    bat 'composer install --optimize-autoloader --no-interaction'
                 }
             }
             post {
@@ -128,9 +128,9 @@ pipeline {
                         echo '🔒 Running Security scan...'
                         script {
                             bat '''
-                                %TRIVY_PATH% fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt
+                                "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" fs . --severity HIGH,CRITICAL --format table --output trivy-report.txt
                                 if errorlevel 1 echo Trivy scan completed
-                                %TRIVY_PATH% fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt
+                                "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" fs composer.lock --severity HIGH,CRITICAL --format table --output trivy-composer-report.txt
                                 if errorlevel 1 echo Trivy composer scan completed
                             '''
                         }
@@ -247,7 +247,7 @@ pipeline {
                         echo '🔍 Scanning Docker image...'
                         script {
                             bat '''
-                                %TRIVY_PATH% image %DOCKER_IMAGE%:%DOCKER_TAG% ^
+                                "C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe" image %DOCKER_IMAGE%:%DOCKER_TAG% ^
                                     --severity HIGH,CRITICAL ^
                                     --format table ^
                                     --output trivy-image-report.txt
@@ -362,97 +362,89 @@ pipeline {
     post {
         always {
             echo '🧹 Cleaning up workspace...'
-            node('Jenkins') {
-                script {
-                    try {
-                        bat 'docker image prune -f'
-                        bat 'if errorlevel 1 echo Docker cleanup completed'
-                        bat 'docker container prune -f'
-                        bat 'if errorlevel 1 echo Container cleanup completed'
-                    } catch (Exception e) {
-                        echo "Cleanup failed: ${e.getMessage()}"
-                    }
+            script {
+                try {
+                    bat 'docker image prune -f'
+                    bat 'if errorlevel 1 echo Docker cleanup completed'
+                    bat 'docker container prune -f'
+                    bat 'if errorlevel 1 echo Container cleanup completed'
+                } catch (Exception e) {
+                    echo "Cleanup failed: ${e.getMessage()}"
                 }
             }
         }
 
         success {
             echo '🎉 Pipeline completed successfully!'
-            node('Jenkins') {
-                script {
-                    try {
-                        emailext (
-                            subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                            body: """
-                                <h2>🎉 Pipeline Completed Successfully!</h2>
-                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                                <hr>
-                                <p>All stages completed successfully including tests, security scans, and quality checks.</p>
-                            """,
-                            mimeType: 'text/html',
-                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                            replyTo: 'jenkins@example.com'
-                        )
-                    } catch (Exception e) {
-                        echo "Email notification failed: ${e.getMessage()}"
-                    }
+            script {
+                try {
+                    emailext (
+                        subject: "✅ Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                            <h2>🎉 Pipeline Completed Successfully!</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                            <hr>
+                            <p>All stages completed successfully including tests, security scans, and quality checks.</p>
+                        """,
+                        mimeType: 'text/html',
+                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                        replyTo: 'jenkins@example.com'
+                    )
+                } catch (Exception e) {
+                    echo "Email notification failed: ${e.getMessage()}"
                 }
             }
         }
 
         failure {
             echo '❌ Pipeline failed!'
-            node('Jenkins') {
-                script {
-                    try {
-                        emailext (
-                            subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                            body: """
-                                <h2>❌ Pipeline Failed!</h2>
-                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                                <hr>
-                                <p>Please check the build logs for more details about the failure.</p>
-                            """,
-                            mimeType: 'text/html',
-                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                            replyTo: 'jenkins@example.com'
-                        )
-                    } catch (Exception e) {
-                        echo "Email notification failed: ${e.getMessage()}"
-                    }
+            script {
+                try {
+                    emailext (
+                        subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                            <h2>❌ Pipeline Failed!</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                            <hr>
+                            <p>Please check the build logs for more details about the failure.</p>
+                        """,
+                        mimeType: 'text/html',
+                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                        replyTo: 'jenkins@example.com'
+                    )
+                } catch (Exception e) {
+                    echo "Email notification failed: ${e.getMessage()}"
                 }
             }
         }
 
         unstable {
             echo '⚠️ Pipeline unstable!'
-            node('Jenkins') {
-                script {
-                    try {
-                        emailext (
-                            subject: "⚠️ Build Unstable: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                            body: """
-                                <h2>⚠️ Pipeline Unstable!</h2>
-                                <p><strong>Job:</strong> ${env.JOB_NAME}</p>
-                                <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
-                                <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
-                                <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                                <hr>
-                                <p>The build completed but some tests or quality checks failed.</p>
-                            """,
-                            mimeType: 'text/html',
-                            to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
-                            replyTo: 'jenkins@example.com'
-                        )
-                    } catch (Exception e) {
-                        echo "Email notification failed: ${e.getMessage()}"
-                    }
+            script {
+                try {
+                    emailext (
+                        subject: "⚠️ Build Unstable: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                            <h2>⚠️ Pipeline Unstable!</h2>
+                            <p><strong>Job:</strong> ${env.JOB_NAME}</p>
+                            <p><strong>Build:</strong> #${env.BUILD_NUMBER}</p>
+                            <p><strong>Duration:</strong> ${currentBuild.durationString}</p>
+                            <p><strong>View Details:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                            <hr>
+                            <p>The build completed but some tests or quality checks failed.</p>
+                        """,
+                        mimeType: 'text/html',
+                        to: "${env.NOTIFICATION_EMAIL ?: 'admin@example.com'}",
+                        replyTo: 'jenkins@example.com'
+                    )
+                } catch (Exception e) {
+                    echo "Email notification failed: ${e.getMessage()}"
                 }
             }
         }
