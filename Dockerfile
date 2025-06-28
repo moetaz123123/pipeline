@@ -19,7 +19,16 @@ COPY . .
 
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
+# Set proper permissions
+RUN chown -R www-data:www-data /var/www \
+    && chmod -R 755 /var/www/storage \
+    && chmod -R 755 /var/www/bootstrap/cache \
+    && chmod +x /var/www/artisan
+
+# Generate application key if not set
+RUN php artisan key:generate --force
 
 EXPOSE 8000
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+
+# Use the server.php file for development
+CMD ["php", "-S", "0.0.0.0:8000", "-t", "public", "server.php"]
