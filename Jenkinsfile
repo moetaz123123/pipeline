@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = "laravel-app:latest"
         DOCKER_TAG = "${env.BUILD_NUMBER}"
-        SONAR_TOKEN = credentials('sonar-token')
+        SONAR_TOKEN = credentials('SonarQube2')
         DOCKER_REGISTRY = 'docker.io'  // Docker Hub
         DOCKER_USERNAME = 'moetaz1928'  // Remplacez par votre username
         // Utilisation des outils installés localement
@@ -55,12 +55,11 @@ pipeline {
 
         stage('Trivy Scan') {
             steps {
-                bat 'docker build -t %DOCKER_IMAGE% .'
                 bat '''
                     echo === Scan de sécurité Trivy ===
                     echo Exécution du scan Trivy...
                     "%TRIVY_PATH%" fs . --skip-files vendor/laravel/pint/builds/pint --timeout 120s > trivy-report.txt 2>&1
-                    
+
                     echo Vérification du fichier de rapport...
                     if exist trivy-report.txt (
                         echo Fichier trivy-report.txt créé avec succès
@@ -68,52 +67,19 @@ pipeline {
                         echo AVERTISSEMENT: Fichier trivy-report.txt non créé, création d'un rapport vide
                         echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-report.txt
                     )
-                    
-                    echo Création du rapport HTML Trivy...
-                    
-                    echo ^<html^> > trivy-report.html
-                    echo ^<head^> >> trivy-report.html
-                    echo ^<title^>Trivy Security Scan Report^</title^> >> trivy-report.html
-                    echo ^<style^> >> trivy-report.html
-                    echo body { font-family: monospace; margin: 20px; background-color: #f5f5f5; } >> trivy-report.html
-                    echo pre { background-color: white; padding: 15px; border: 1px solid #ddd; border-radius: 5px; overflow-x: auto; } >> trivy-report.html
-                    echo h1 { color: #333; border-bottom: 2px solid #007acc; } >> trivy-report.html
-                    echo h2 { color: #007acc; } >> trivy-report.html
-                    echo table { border-collapse: collapse; width: 100%%; margin: 10px 0; } >> trivy-report.html
-                    echo th, td { border: 1px solid #ddd; padding: 8px; text-align: left; } >> trivy-report.html
-                    echo th { background-color: #007acc; color: white; } >> trivy-report.html
-                    echo .success { color: green; } >> trivy-report.html
-                    echo .warning { color: orange; } >> trivy-report.html
-                    echo .error { color: red; } >> trivy-report.html
-                    echo ^</style^> >> trivy-report.html
-                    echo ^</head^> >> trivy-report.html
-                    echo ^<body^> >> trivy-report.html
-                    echo ^<h1^>Trivy Security Scan Report^</h1^> >> trivy-report.html
-                    echo ^<h2^>Scan Details^</h2^> >> trivy-report.html
-                    echo ^<p^>Scan completed for directory: %WORKSPACE%^</p^> >> trivy-report.html
-                    echo ^<p^>Command: trivy fs . --skip-files vendor/laravel/pint/builds/pint --timeout 120s^</p^> >> trivy-report.html
-                    echo ^<h2^>Scan Results^</h2^> >> trivy-report.html
-                    echo ^<pre^> >> trivy-report.html
-                    
-                    type trivy-report.txt >> trivy-report.html
-                    
-                    echo ^</pre^> >> trivy-report.html
-                    echo ^<p class="success"^>^<strong^>✓^</strong^> Scan completed successfully. Check the detailed text report (trivy-report.txt) for complete vulnerability information.^</p^> >> trivy-report.html
-                    echo ^</body^> >> trivy-report.html
-                    echo ^</html^> >> trivy-report.html
-                    
-                    echo Rapport HTML Trivy créé: trivy-report.html
                 '''
             }
             post {
                 always {
+                    bat 'type trivy-report.txt'
                     publishHTML(target: [
                         allowMissing: true,
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
                         reportDir: '.',
-                        reportFiles: 'trivy-report.html',
-                        reportName: 'Trivy Security Scan'
+                        reportFiles: 'trivy-report.txt',
+                        reportName: 'Trivy Security Scan (Texte Brut)',
+                        additionalHTML: '<style>pre,body{font-family:monospace;}</style>'
                     ])
                 }
             }
