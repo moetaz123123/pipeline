@@ -56,10 +56,12 @@ pipeline {
         stage('Trivy Scan') {
             steps {
                 bat 'docker build -t %DOCKER_IMAGE% .'
-                bat 'docker run --rm -v //var/run/docker.sock:/var/run/docker.sock aquasec/trivy image %DOCKER_IMAGE% --format json --output trivy-report.json'
+                bat 'docker run --rm -v "%WORKSPACE%:/app" aquasec/trivy fs /app --skip-files vendor/laravel/pint/builds/pint --format table --output trivy-report.txt'
                 bat '''
                     echo Création du rapport HTML Trivy...
-                    echo ^<html^>^<head^>^<title^>Trivy Security Scan Report^</title^>^<style^>body{font-family:Arial,sans-serif;margin:20px;}table{border-collapse:collapse;width:100%%;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#f2f2f2;}h1{color:#333;}^</style^>^</head^>^<body^>^<h1^>Trivy Security Scan Report^</h1^>^<p^>Scan completed for image: %DOCKER_IMAGE%^</p^>^<p^>JSON report saved as: trivy-report.json^</p^>^<p^>Check the JSON file for detailed vulnerability information.^</p^>^</body^>^</html^> > trivy-report.html
+                    echo ^<html^>^<head^>^<title^>Trivy Security Scan Report^</title^>^<style^>body{font-family:monospace;margin:20px;background-color:#f5f5f5;}pre{background-color:white;padding:15px;border:1px solid #ddd;border-radius:5px;overflow-x:auto;}h1{color:#333;border-bottom:2px solid #007acc;}h2{color:#007acc;}table{border-collapse:collapse;width:100%%;margin:10px 0;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#007acc;color:white;}^</style^>^</head^>^<body^>^<h1^>Trivy Security Scan Report^</h1^>^<h2^>Scan Details^</h2^>^<p^>Scan completed for directory: %WORKSPACE%^</p^>^<p^>Command: trivy fs /app --skip-files vendor/laravel/pint/builds/pint --format table^</p^>^<h2^>Scan Results^</h2^>^<pre^> > trivy-report.html
+                    type trivy-report.txt >> trivy-report.html
+                    echo ^</pre^>^<p^>^<strong^>Note:^</strong^> Check the detailed text report (trivy-report.txt) for complete vulnerability information.^</p^>^</body^>^</html^> >> trivy-report.html
                 '''
             }
             post {
@@ -102,7 +104,7 @@ pipeline {
                                 )
                                 
                                 echo Lancement de sonar-scanner...
-                                "%SONAR_SCANNER_PATH%"
+                                "%SONAR_SCANNER_PATH%" -Dsonar.projectKey=SonarQube
                                 
                                 if errorlevel 1 (
                                     echo ERREUR: Échec de l'analyse SonarQube
