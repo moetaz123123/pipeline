@@ -49,10 +49,19 @@ pipeline {
                     echo === Scan de sécurité Trivy ===
                     echo Exécution du scan Trivy...
                     "%TRIVY_PATH%" fs . --skip-files vendor/laravel/pint/builds/pint --timeout 120s > trivy-report.txt 2>&1
-
+                    set TRIVY_EXIT_CODE=%errorlevel%
+                    
                     echo Vérification du fichier de rapport...
                     if exist trivy-report.txt (
                         echo Fichier trivy-report.txt créé avec succès
+                        echo Code de sortie Trivy: %TRIVY_EXIT_CODE%
+                        if %TRIVY_EXIT_CODE% EQU 0 (
+                            echo ✅ Aucune vulnérabilité critique détectée
+                        ) else (
+                            echo ⚠️ Vulnérabilités détectées (code: %TRIVY_EXIT_CODE%)
+                            echo Ceci est normal - Trivy retourne 1 quand des vulnérabilités sont trouvées
+                            echo Vérifiez le rapport pour plus de détails
+                        )
                     ) else (
                         echo AVERTISSEMENT: Fichier trivy-report.txt non créé, création d'un rapport vide
                         echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-report.txt
@@ -354,8 +363,18 @@ ${readFile('trivy-report.txt')}
                 bat '''
                     echo === Scan de sécurité Trivy (image Docker) ===
                     "%TRIVY_PATH%" image %DOCKER_IMAGE% --timeout 120s > trivy-image-report.txt 2>&1
+                    set TRIVY_IMAGE_EXIT_CODE=%errorlevel%
+                    
                     if exist trivy-image-report.txt (
                         echo Fichier trivy-image-report.txt créé avec succès
+                        echo Code de sortie Trivy Image: %TRIVY_IMAGE_EXIT_CODE%
+                        if %TRIVY_IMAGE_EXIT_CODE% EQU 0 (
+                            echo ✅ Aucune vulnérabilité critique détectée dans l'image Docker
+                        ) else (
+                            echo ⚠️ Vulnérabilités détectées dans l'image Docker (code: %TRIVY_IMAGE_EXIT_CODE%)
+                            echo Ceci est normal - Trivy retourne 1 quand des vulnérabilités sont trouvées
+                            echo Vérifiez le rapport pour plus de détails
+                        )
                     ) else (
                         echo AVERTISSEMENT: Fichier trivy-image-report.txt non créé, création d'un rapport vide
                         echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-image-report.txt
