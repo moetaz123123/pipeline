@@ -248,11 +248,40 @@ ${readFile('trivy-report.txt')}
             }
         }
 
-
         stage('Debug Workspace') {
             steps {
                 bat 'dir'
                 bat 'dir /s server.php'
+            }
+        }
+
+        stage('Create server.php') {
+            steps {
+                bat '''
+                    echo === Création du fichier server.php ===
+                    echo ^<?php > server.php
+                    echo. >> server.php
+                    echo /** >> server.php
+                    echo  * Laravel - A PHP Framework For Web Artisans >> server.php
+                    echo  * >> server.php
+                    echo  * @package  Laravel >> server.php
+                    echo  * @author   Taylor Otwell ^<taylor@laravel.com^> >> server.php
+                    echo  */ >> server.php
+                    echo. >> server.php
+                    echo $uri = urldecode( >> server.php
+                    echo     parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '' >> server.php
+                    echo ); >> server.php
+                    echo. >> server.php
+                    echo // This file allows us to emulate Apache's "mod_rewrite" functionality from the >> server.php
+                    echo // built-in PHP web server. This provides a convenient way to test a Laravel >> server.php
+                    echo // application without having installed a "real" web server software here. >> server.php
+                    echo if ($uri !== '/' ^&^& file_exists(__DIR__.'/public'.$uri)) { >> server.php
+                    echo     return false; >> server.php
+                    echo } >> server.php
+                    echo. >> server.php
+                    echo require_once __DIR__.'/public/index.php'; >> server.php
+                    echo === Fichier server.php créé avec succès ===
+                '''
             }
         }
 
