@@ -248,6 +248,14 @@ ${readFile('trivy-report.txt')}
             }
         }
 
+
+        stage('Debug Workspace') {
+            steps {
+                bat 'dir'
+                bat 'dir /s server.php'
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 bat '''
