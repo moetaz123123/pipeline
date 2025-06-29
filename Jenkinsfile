@@ -285,6 +285,23 @@ ${readFile('trivy-report.txt')}
             }
         }
 
+        stage('Verify server.php') {
+            steps {
+                bat '''
+                    echo === Vérification du fichier server.php ===
+                    if exist server.php (
+                        echo ✅ Fichier server.php trouvé
+                        echo Contenu du fichier server.php:
+                        type server.php
+                    ) else (
+                        echo ❌ Fichier server.php NON TROUVÉ
+                        echo Liste des fichiers dans le répertoire:
+                        dir
+                    )
+                '''
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 bat '''
@@ -315,6 +332,19 @@ ${readFile('trivy-report.txt')}
                         exit /b 1
                     )
                     echo === Image Docker construite ===
+                '''
+            }
+        }
+
+        stage('Debug Container') {
+            steps {
+                bat '''
+                    echo === Debug du conteneur Docker ===
+                    echo Vérification du contenu du conteneur...
+                    docker run --rm %DOCKER_IMAGE% ls -la /var/www/server.php
+                    echo.
+                    echo Vérification du répertoire /var/www:
+                    docker run --rm %DOCKER_IMAGE% ls -la /var/www/ | findstr server
                 '''
             }
         }
