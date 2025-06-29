@@ -10,7 +10,7 @@ pipeline {
         // Utilisation des outils installés localement
         COMPOSER_PATH = 'composer'
         PHP_PATH = 'C:\\xampp\\php\\php.exe'
-        TRIVY_DOCKER_IMAGE = 'aquasec/trivy:latest'  // Utilisation de l'image Docker Trivy
+        TRIVY_PATH = 'C:\\Users\\User\\Downloads\\trivy_0.63.0_windows-64bit\\trivy.exe' // Utilisation de l'image Docker Trivy
         SONARQUBE_SERVER = 'SonarQube' // Nom configuré dans Jenkins
         SONAR_SCANNER_PATH = 'C:\\Users\\User\\Downloads\\sonar-scanner-4.8.0.2856-windows\\bin\\sonar-scanner.bat'
     }
@@ -43,53 +43,22 @@ pipeline {
             }
         }
 
+        
         stage('Trivy Scan') {
             steps {
-                script {
-                    try {
-                        echo "=== Scan de sécurité Trivy ==="
-                        echo "Exécution du scan Trivy avec Docker..."
-                        
-                        // Essayer d'abord avec Docker
-                        def trivyResult = bat(
-                            script: 'docker run --rm -v "%cd%:/app" aquasec/trivy:latest fs /app --skip-files vendor/laravel/pint/builds/pint --format table --timeout 300s',
-                            returnStdout: true,
-                            returnStatus: true
-                        )
-                        
-                        if (trivyResult[1] == 0) {
-                            echo "✅ Scan Trivy réussi"
-                            writeFile file: 'trivy-report.txt', text: trivyResult[0]
-                        } else {
-                            echo "⚠️ Scan Trivy échoué, création d'un rapport de base"
-                            writeFile file: 'trivy-report.txt', text: """
-                                === Rapport Trivy ===
-                                Scan interrompu ou échoué
-                                Code de sortie: ${trivyResult[1]}
-                                
-                                Ceci peut être dû à:
-                                - Timeout lors du téléchargement de la base de données
-                                - Problèmes de réseau
-                                - Fichiers trop volumineux
-                                
-                                Recommandations:
-                                - Vérifier la connectivité réseau
-                                - Augmenter les timeouts si nécessaire
-                                - Exclure plus de répertoires si nécessaire
-                            """
-                        }
-                    } catch (Exception e) {
-                        echo "❌ Erreur lors du scan Trivy: ${e.getMessage()}"
-                        echo "Création d'un rapport d'erreur..."
-                        writeFile file: 'trivy-report.txt', text: """
-                            === Erreur Trivy ===
-                            ${e.getMessage()}
-                            
-                            Le scan de sécurité n'a pas pu être effectué.
-                            Veuillez vérifier la configuration Trivy.
-                        """
-                    }
-                }
+                bat '''
+                    echo === Scan de sécurité Trivy ===
+                    echo Exécution du scan Trivy...
+                    "%TRIVY_PATH%" fs . --skip-files vendor/laravel/pint/builds/pint --timeout 120s > trivy-report.txt 2>&1
+
+                    echo Vérification du fichier de rapport...
+                    if exist trivy-report.txt (
+                        echo Fichier trivy-report.txt créé avec succès
+                    ) else (
+                        echo AVERTISSEMENT: Fichier trivy-report.txt non créé, création d'un rapport vide
+                        echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-report.txt
+                    )
+                '''
             }
             post {
                 always {
@@ -121,6 +90,7 @@ ${readFile('trivy-report.txt')}
                 }
             }
         }
+
 
         stage('SonarQube Analysis') {
             steps {
