@@ -49,19 +49,10 @@ pipeline {
                     echo === Scan de sécurité Trivy ===
                     echo Exécution du scan Trivy...
                     "%TRIVY_PATH%" fs . --skip-files vendor/laravel/pint/builds/pint --timeout 120s > trivy-report.txt 2>&1
-                    set TRIVY_EXIT_CODE=%errorlevel%
-                    
+
                     echo Vérification du fichier de rapport...
                     if exist trivy-report.txt (
                         echo Fichier trivy-report.txt créé avec succès
-                        echo Code de sortie Trivy: %TRIVY_EXIT_CODE%
-                        if %TRIVY_EXIT_CODE% EQU 0 (
-                            echo ✅ Aucune vulnérabilité critique détectée
-                        ) else (
-                            echo ⚠️ Vulnérabilités détectées (code: %TRIVY_EXIT_CODE%)
-                            echo Ceci est normal - Trivy retourne 1 quand des vulnérabilités sont trouvées
-                            echo Vérifiez le rapport pour plus de détails
-                        )
                     ) else (
                         echo AVERTISSEMENT: Fichier trivy-report.txt non créé, création d'un rapport vide
                         echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-report.txt
@@ -257,57 +248,50 @@ ${readFile('trivy-report.txt')}
             }
         }
 
-        stage('Debug Workspace') {
-            steps {
-                bat 'dir'
-                bat 'dir /s server.php'
-            }
-        }
-
-        stage('Create server.php') {
+        stage('Trivy Code Scan') {
             steps {
                 bat '''
-                    echo === Création du fichier server.php ===
-                    echo ^<?php > server.php
-                    echo. >> server.php
-                    echo /** >> server.php
-                    echo  * Laravel - A PHP Framework For Web Artisans >> server.php
-                    echo  * >> server.php
-                    echo  * @package  Laravel >> server.php
-                    echo  * @author   Taylor Otwell ^<taylor@laravel.com^> >> server.php
-                    echo  */ >> server.php
-                    echo. >> server.php
-                    echo $uri = urldecode( >> server.php
-                    echo     parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '' >> server.php
-                    echo ); >> server.php
-                    echo. >> server.php
-                    echo // This file allows us to emulate Apache's "mod_rewrite" functionality from the >> server.php
-                    echo // built-in PHP web server. This provides a convenient way to test a Laravel >> server.php
-                    echo // application without having installed a "real" web server software here. >> server.php
-                    echo if ($uri !== '/' ^&^& file_exists(__DIR__.'/public'.$uri)) { >> server.php
-                    echo     return false; >> server.php
-                    echo } >> server.php
-                    echo. >> server.php
-                    echo require_once __DIR__.'/public/index.php'; >> server.php
-                    echo === Fichier server.php créé avec succès ===
-                '''
-            }
-        }
-
-        stage('Verify server.php') {
-            steps {
-                bat '''
-                    echo === Vérification du fichier server.php ===
-                    if exist server.php (
-                        echo ✅ Fichier server.php trouvé
-                        echo Contenu du fichier server.php:
-                        type server.php
+                    echo === Scan de sécurité Trivy (code) ===
+                    "%TRIVY_PATH%" fs . --skip-files vendor/laravel/pint/builds/pint --timeout 120s > trivy-report.txt 2>&1
+                    if exist trivy-report.txt (
+                        echo Fichier trivy-report.txt créé avec succès
                     ) else (
-                        echo ❌ Fichier server.php NON TROUVÉ
-                        echo Liste des fichiers dans le répertoire:
-                        dir
+                        echo AVERTISSEMENT: Fichier trivy-report.txt non créé, création d'un rapport vide
+                        echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-report.txt
                     )
                 '''
+            }
+            post {
+                always {
+                    bat 'type trivy-report.txt'
+                    script {
+                        def trivyText = readFile('trivy-report.txt')
+                        writeFile file: 'trivy-report.html', text: """
+                            <html>
+                            <head>
+                                <meta charset='UTF-8'>
+                                <style>
+                                    body { background: #222; color: #eee; }
+                                    pre { font-family: monospace; font-size: 13px; }
+                                </style>
+                            </head>
+                            <body>
+                                <pre>
+${trivyText}
+                                </pre>
+                            </body>
+                            </html>
+                        """
+                    }
+                    publishHTML(target: [
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: '.',
+                        reportFiles: 'trivy-report.html',
+                        reportName: 'Trivy Security Scan (Tableaux CLI)'
+                    ])
+                }
             }
         }
 
@@ -345,36 +329,13 @@ ${readFile('trivy-report.txt')}
             }
         }
 
-        stage('Debug Container') {
-            steps {
-                bat '''
-                    echo === Debug du conteneur Docker ===
-                    echo Vérification du contenu du conteneur...
-                    docker run --rm %DOCKER_IMAGE% ls -la /var/www/server.php
-                    echo.
-                    echo Vérification du répertoire /var/www:
-                    docker run --rm %DOCKER_IMAGE% ls -la /var/www/ | findstr server
-                '''
-            }
-        }
-
         stage('Trivy Image Scan') {
             steps {
                 bat '''
                     echo === Scan de sécurité Trivy (image Docker) ===
                     "%TRIVY_PATH%" image %DOCKER_IMAGE% --timeout 120s > trivy-image-report.txt 2>&1
-                    set TRIVY_IMAGE_EXIT_CODE=%errorlevel%
-                    
                     if exist trivy-image-report.txt (
                         echo Fichier trivy-image-report.txt créé avec succès
-                        echo Code de sortie Trivy Image: %TRIVY_IMAGE_EXIT_CODE%
-                        if %TRIVY_IMAGE_EXIT_CODE% EQU 0 (
-                            echo ✅ Aucune vulnérabilité critique détectée dans l'image Docker
-                        ) else (
-                            echo ⚠️ Vulnérabilités détectées dans l'image Docker (code: %TRIVY_IMAGE_EXIT_CODE%)
-                            echo Ceci est normal - Trivy retourne 1 quand des vulnérabilités sont trouvées
-                            echo Vérifiez le rapport pour plus de détails
-                        )
                     ) else (
                         echo AVERTISSEMENT: Fichier trivy-image-report.txt non créé, création d'un rapport vide
                         echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-image-report.txt
