@@ -45,28 +45,51 @@ pipeline {
 
         stage('Trivy Scan') {
             steps {
-                bat '''
-                    echo === Scan de sécurité Trivy ===
-                    echo Exécution du scan Trivy avec Docker...
-                    docker run --rm -v "%cd%:/app" %TRIVY_DOCKER_IMAGE% fs /app --skip-files vendor/laravel/pint/builds/pint --format table > trivy-report.txt 2>&1
-                    set TRIVY_EXIT_CODE=%errorlevel%
-                    
-                    echo Vérification du fichier de rapport...
-                    if exist trivy-report.txt (
-                        echo Fichier trivy-report.txt créé avec succès
-                        echo Code de sortie Trivy: %TRIVY_EXIT_CODE%
-                        if %TRIVY_EXIT_CODE% EQU 0 (
-                            echo ✅ Aucune vulnérabilité critique détectée
-                        ) else (
-                            echo ⚠️ Vulnérabilités détectées (code: %TRIVY_EXIT_CODE%)
-                            echo Ceci est normal - Trivy retourne 1 quand des vulnérabilités sont trouvées
-                            echo Vérifiez le rapport pour plus de détails
+                script {
+                    try {
+                        echo "=== Scan de sécurité Trivy ==="
+                        echo "Exécution du scan Trivy avec Docker..."
+                        
+                        // Essayer d'abord avec Docker
+                        def trivyResult = bat(
+                            script: 'docker run --rm -v "%cd%:/app" aquasec/trivy:latest fs /app --skip-files vendor/laravel/pint/builds/pint --format table --timeout 300s',
+                            returnStdout: true,
+                            returnStatus: true
                         )
-                    ) else (
-                        echo AVERTISSEMENT: Fichier trivy-report.txt non créé, création d'un rapport vide
-                        echo "Aucune vulnérabilité détectée ou erreur lors du scan" > trivy-report.txt
-                    )
-                '''
+                        
+                        if (trivyResult[1] == 0) {
+                            echo "✅ Scan Trivy réussi"
+                            writeFile file: 'trivy-report.txt', text: trivyResult[0]
+                        } else {
+                            echo "⚠️ Scan Trivy échoué, création d'un rapport de base"
+                            writeFile file: 'trivy-report.txt', text: """
+                                === Rapport Trivy ===
+                                Scan interrompu ou échoué
+                                Code de sortie: ${trivyResult[1]}
+                                
+                                Ceci peut être dû à:
+                                - Timeout lors du téléchargement de la base de données
+                                - Problèmes de réseau
+                                - Fichiers trop volumineux
+                                
+                                Recommandations:
+                                - Vérifier la connectivité réseau
+                                - Augmenter les timeouts si nécessaire
+                                - Exclure plus de répertoires si nécessaire
+                            """
+                        }
+                    } catch (Exception e) {
+                        echo "❌ Erreur lors du scan Trivy: ${e.getMessage()}"
+                        echo "Création d'un rapport d'erreur..."
+                        writeFile file: 'trivy-report.txt', text: """
+                            === Erreur Trivy ===
+                            ${e.getMessage()}
+                            
+                            Le scan de sécurité n'a pas pu être effectué.
+                            Veuillez vérifier la configuration Trivy.
+                        """
+                    }
+                }
             }
             post {
                 always {
